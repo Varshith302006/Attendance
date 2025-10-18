@@ -19,12 +19,12 @@ async function fetchAttendance(username, password) {
     const page = await browser.newPage();
 
     // --- Login ---
-    await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle2', timeout: 60000 });
-    await page.type('input[name="txt_uname"]', username, { delay: 30 });
-    await page.type('input[name="txt_pwd"]', password, { delay: 30 });
+    await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 30000 });
+    await page.type('input[name="txt_uname"]', username, { delay: 10 });
+    await page.type('input[name="txt_pwd"]', password, { delay: 10 });
     await Promise.all([
       page.click('#but_submit'),
-      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 40000 })
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
     ]);
 
     // --- Academic Attendance ---
