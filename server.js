@@ -1,43 +1,46 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const { launchSession, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
+const { fetchAcademic, fetchBiometric } = require("./fetchAttendance");
 
 const app = express();
+
+// Middleware
 app.use(cors({ origin: "https://frontend-attendance-steel.vercel.app" }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// --- Routes ---
+// 1️⃣ Academic Attendance
 app.post("/get-academic", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ success: false, error: "Username and password required" });
 
-  let browser, page;
   try {
-    ({ browser, page } = await launchSession(username, password));
-    const academicWithTargets = await fetchAcademic(page);
+    const academicWithTargets = await fetchAcademic(username, password);
     res.json({ success: true, data: academicWithTargets });
-    // Keep browser open for biometric fetch
-    req.browser = browser;
-    req.page = page;
   } catch (err) {
-    if (browser) await browser.close();
+    console.error("Academic error:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
+// 2️⃣ Biometric Attendance
 app.post("/get-biometric", async (req, res) => {
   const { username, password } = req.body;
-  let browser, page;
+  if (!username || !password) return res.status(400).json({ success: false, error: "Username and password required" });
+
   try {
-    ({ browser, page } = await launchSession(username, password));
-    const biometricAttendance = await fetchBiometric(page);
-    await browser.close();
+    const biometricAttendance = await fetchBiometric(username, password);
     res.json({ success: true, data: biometricAttendance });
   } catch (err) {
-    if (browser) await browser.close();
+    console.error("Biometric error:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("Server running"));
+// Health check
+app.get("/", (req, res) => res.send("Attendance API running ✅"));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

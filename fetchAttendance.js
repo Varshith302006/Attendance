@@ -1,50 +1,104 @@
 const puppeteer = require('puppeteer-core');
-const chromium = require('chromium');
+const chromium = require('chromium'); // Chrome binary for Render
 
-async function fetchAcademic(page) {
-  await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
-
-  const academicAttendance = await page.$$eval('table tbody tr', rows =>
-    rows.map(row => {
-      const cols = row.querySelectorAll('td');
-      if (cols.length >= 8) {
-        return {
-          courseCode: cols[1].innerText.trim(),
-          subject: cols[2].innerText.trim(),
-          total: parseInt(cols[5].innerText.trim()),
-          attended: parseInt(cols[6].innerText.trim()),
-          percentage: parseFloat(cols[7].innerText.trim())
-        };
-      }
-    }).filter(Boolean)
-  );
-
-  return academicAttendance.map(sub => ({
-    ...sub,
-    classesToAttendFor75: classesToReachTarget(sub.attended, sub.total),
-    classesCanBunk: classesCanBunk(sub.attended, sub.total)
-  }));
+async function launchBrowser() {
+  return await puppeteer.launch({
+    headless: true,
+    executablePath: chromium.path,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage"
+    ],
+    timeout: 60000
+  });
 }
 
-async function fetchBiometric(page) {
-  await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
+// --- Academic Attendance ---
+async function fetchAcademic(username, password) {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
 
-  const biometricAttendance = await page.$$eval('table tbody tr', rows => {
-    const totalDays = rows.length - 1;
-    const presentCount = rows.filter(row => {
-      const cols = row.querySelectorAll('td');
-      return Array.from(cols).some(td => td.innerText.trim().toLowerCase() === 'present');
-    }).length;
-    return {
-      totalDays,
-      presentCount,
-      percentage: totalDays > 0 ? ((presentCount / totalDays) * 100).toFixed(2) : 0
-    };
-  });
+    // Login
+    await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 30000 });
+    await page.type('input[name="txt_uname"]', username, { delay: 10 });
+    await page.type('input[name="txt_pwd"]', password, { delay: 10 });
+    await Promise.all([
+      page.click('#but_submit'),
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
+    ]);
 
-  return biometricAttendance;
+    // Academic Attendance
+    await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
+    await page.waitForSelector('table tbody tr', { timeout: 15000 });
+
+    const academicAttendance = await page.$$eval('table tbody tr', rows =>
+      rows.map(row => {
+        const cols = row.querySelectorAll('td');
+        if (cols.length >= 8) {
+          return {
+            courseCode: cols[1].innerText.trim(),
+            subject: cols[2].innerText.trim(),
+            total: parseInt(cols[5].innerText.trim()),
+            attended: parseInt(cols[6].innerText.trim()),
+            percentage: parseFloat(cols[7].innerText.trim())
+          };
+        }
+      }).filter(Boolean)
+    );
+
+    const academicWithTargets = academicAttendance.map(sub => ({
+      ...sub,
+      classesToAttendFor75: classesToReachTarget(sub.attended, sub.total),
+      classesCanBunk: classesCanBunk(sub.attended, sub.total)
+    }));
+
+    return academicWithTargets;
+
+  } finally {
+    await browser.close();
+  }
+}
+
+// --- Biometric Attendance ---
+async function fetchBiometric(username, password) {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+
+    // Login
+    await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 30000 });
+    await page.type('input[name="txt_uname"]', username, { delay: 10 });
+    await page.type('input[name="txt_pwd"]', password, { delay: 10 });
+    await Promise.all([
+      page.click('#but_submit'),
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
+    ]);
+
+    // Biometric Attendance
+    await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.waitForSelector('table tbody tr', { timeout: 15000 });
+
+    const biometricAttendance = await page.$$eval('table tbody tr', rows => {
+      const totalDays = rows.length - 1;
+      const presentCount = rows.filter(row => {
+        const cols = row.querySelectorAll('td');
+        return Array.from(cols).some(td => td.innerText.trim().toLowerCase() === 'present');
+      }).length;
+      return {
+        totalDays,
+        presentCount,
+        percentage: totalDays > 0 ? ((presentCount / totalDays) * 100).toFixed(2) : 0
+      };
+    });
+
+    return biometricAttendance;
+
+  } finally {
+    await browser.close();
+  }
 }
 
 // --- Helper functions ---
@@ -60,23 +114,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-// --- Launch browser & login ---
-async function launchSession(username, password) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: chromium.path,
-    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
-  });
-  const page = await browser.newPage();
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle2', timeout: 30000 });
-  await page.type('input[name="txt_uname"]', username, { delay: 10 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 10 });
-  await Promise.all([
-    page.click('#but_submit'),
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
-  ]);
-
-  return { browser, page };
-}
-
-module.exports = { launchSession, fetchAcademic, fetchBiometric };
+module.exports = { fetchAcademic, fetchBiometric };
