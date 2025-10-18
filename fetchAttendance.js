@@ -1,38 +1,38 @@
 const puppeteer = require('puppeteer-core');
-const chromium = require('chromium'); // provides a working Chrome binary on Render
+const chromium = require('chromium'); // Chrome binary for Render
 
 async function fetchAttendance(username, password) {
   let browser;
   try {
     browser = await puppeteer.launch({
       headless: true,
-      executablePath: chromium.path, // important!
+      executablePath: chromium.path,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-gpu",
         "--disable-dev-shm-usage"
       ],
-      timeout: 60000 // 60s timeout
+      timeout: 60000
     });
 
     const page = await browser.newPage();
 
     // --- Login ---
     await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle2', timeout: 60000 });
-    await page.type('input[name="txt_uname"]', username, { delay: 50 });
-    await page.type('input[name="txt_pwd"]', password, { delay: 50 });
-    await page.click('#but_submit');
-    await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 });
+    await page.type('input[name="txt_uname"]', username, { delay: 30 });
+    await page.type('input[name="txt_pwd"]', password, { delay: 30 });
+    await Promise.all([
+      page.click('#but_submit'),
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 40000 })
+    ]);
 
     // --- Academic Attendance ---
-    await page.waitForSelector('a[href*="action=stud_att_STD"]', { timeout: 60000 });
     await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-    await page.waitForSelector('table tbody tr', { timeout: 60000 });
+    await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
-    const academicAttendance = await page.evaluate(() => {
-      const rows = Array.from(document.querySelectorAll('table tbody tr'));
-      return rows.map(row => {
+    const academicAttendance = await page.$$eval('table tbody tr', rows =>
+      rows.map(row => {
         const cols = row.querySelectorAll('td');
         if (cols.length >= 8) {
           return {
@@ -43,27 +43,25 @@ async function fetchAttendance(username, password) {
             percentage: parseFloat(cols[7].innerText.trim())
           };
         }
-      }).filter(Boolean);
-    });
+      }).filter(Boolean)
+    );
 
     const academicWithTargets = academicAttendance.map(sub => ({
       ...sub,
-      classesToAttendFor75: classesToReachTarget(sub.attended, sub.total, 75),
-      classesCanBunk: classesCanBunk(sub.attended, sub.total, 75)
+      classesToAttendFor75: classesToReachTarget(sub.attended, sub.total),
+      classesCanBunk: classesCanBunk(sub.attended, sub.total)
     }));
 
-    // --- Biometric Attendance ---
-    await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 60000 });
-    await page.waitForSelector('table tbody tr', { timeout: 60000 });
+    // --- Biometric Attendance (reuse same page) ---
+    await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
+    await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
-    const biometricAttendance = await page.evaluate(() => {
-      const rows = Array.from(document.querySelectorAll('table tbody tr'));
+    const biometricAttendance = await page.$$eval('table tbody tr', rows => {
       const totalDays = rows.length - 1;
       const presentCount = rows.filter(row => {
         const cols = row.querySelectorAll('td');
         return Array.from(cols).some(td => td.innerText.trim().toLowerCase() === 'present');
       }).length;
-
       return {
         totalDays,
         presentCount,
@@ -74,7 +72,7 @@ async function fetchAttendance(username, password) {
     return { academicWithTargets, biometricAttendance };
 
   } catch (err) {
-    console.error("Error in Puppeteer:", err);
+    console.error("Puppeteer error:", err);
     throw err;
   } finally {
     if (browser) await browser.close();
