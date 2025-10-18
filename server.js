@@ -1,3 +1,9 @@
+const cors = require('cors');
+app.use(cors({
+  origin: 'https://frontend-attendance-steel.vercel.app', // ← your Vercel URL
+  methods: ['POST', 'GET']
+}));
+
 // Tell Puppeteer where to keep its cache
 process.env.PUPPETEER_CACHE_DIR = "/opt/render/.cache/puppeteer";
 
