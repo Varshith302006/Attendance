@@ -1,24 +1,27 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium'); // Chrome binary for Render
 
-async function fetchAttendance(username, password) {
-  let browser;
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      executablePath: chromium.path,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage"
-      ],
-      timeout: 60000
-    });
+async function launchBrowser() {
+  return await puppeteer.launch({
+    headless: true,
+    executablePath: chromium.path,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage"
+    ],
+    timeout: 60000
+  });
+}
 
+// --- Academic Attendance ---
+async function fetchAcademic(username, password) {
+  const browser = await launchBrowser();
+  try {
     const page = await browser.newPage();
 
-    // --- Login ---
+    // Login
     await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 30000 });
     await page.type('input[name="txt_uname"]', username, { delay: 10 });
     await page.type('input[name="txt_pwd"]', password, { delay: 10 });
@@ -27,7 +30,7 @@ async function fetchAttendance(username, password) {
       page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
     ]);
 
-    // --- Academic Attendance ---
+    // Academic Attendance
     await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
     await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
@@ -52,7 +55,29 @@ async function fetchAttendance(username, password) {
       classesCanBunk: classesCanBunk(sub.attended, sub.total)
     }));
 
-    // --- Biometric Attendance (reuse same page) ---
+    return academicWithTargets;
+
+  } finally {
+    await browser.close();
+  }
+}
+
+// --- Biometric Attendance ---
+async function fetchBiometric(username, password) {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+
+    // Login
+    await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 30000 });
+    await page.type('input[name="txt_uname"]', username, { delay: 10 });
+    await page.type('input[name="txt_pwd"]', password, { delay: 10 });
+    await Promise.all([
+      page.click('#but_submit'),
+      page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 })
+    ]);
+
+    // Biometric Attendance
     await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
     await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
@@ -69,13 +94,10 @@ async function fetchAttendance(username, password) {
       };
     });
 
-    return { academicWithTargets, biometricAttendance };
+    return biometricAttendance;
 
-  } catch (err) {
-    console.error("Puppeteer error:", err);
-    throw err;
   } finally {
-    if (browser) await browser.close();
+    await browser.close();
   }
 }
 
@@ -92,4 +114,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = fetchAttendance;
+module.exports = { fetchAcademic, fetchBiometric };
