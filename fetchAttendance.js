@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium');
 
+// --- Launch Browser ---
 async function launchBrowser() {
   const browser = await puppeteer.launch({
     headless: true,
@@ -11,7 +12,7 @@ async function launchBrowser() {
   return { browser, page };
 }
 
-// --- Login once and reuse the page ---
+// --- Login ---
 async function login(page, username, password) {
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
   await page.type('input[name="txt_uname"]', username, { delay: 10 });
@@ -54,20 +55,24 @@ async function fetchBiometric(page) {
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
-  const biometricAttendance = await page.$$eval('table tbody tr', rows => {
-    const totalDays = rows.length - 1;
-    const presentCount = rows.filter(row => {
+  const rows = await page.$$eval('table tbody tr', rows =>
+    rows.map(row => {
       const cols = row.querySelectorAll('td');
-      return Array.from(cols).some(td => td.innerText.trim().toLowerCase() === 'present');
-    }).length;
-    return {
-      totalDays,
-      presentCount,
-      percentage: totalDays > 0 ? ((presentCount / totalDays) * 100).toFixed(2) : 0
-    };
-  });
+      return Array.from(cols).map(td => td.innerText.trim());
+    })
+  );
 
-  return biometricAttendance;
+  const totalDays = rows.length - 1; // exclude header
+  const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
+  const percentage = totalDays > 0 ? (presentCount / totalDays) * 100 : 0;
+
+  return {
+    totalDays,
+    presentCount,
+    percentage: Number(percentage.toFixed(2)),
+    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
+  };
 }
 
 // --- Helpers ---
