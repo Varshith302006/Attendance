@@ -16,8 +16,8 @@ async function launchBrowser() {
 async function login(page, username, password) {
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForSelector('input[name="txt_uname"]', { timeout: 10000 });
-  await page.type('input[name="txt_uname"]', username, { delay: 5 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 5 });
+  await page.type('input[name="txt_uname"]', username, { delay: 1 });
+  await page.type('input[name="txt_pwd"]', password, { delay: 1 });
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
