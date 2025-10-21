@@ -1,10 +1,9 @@
-// server.js
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const puppeteer = require('puppeteer-core');
-const chromium = require('chromium');
+const puppeteer = require("puppeteer-core");
+const chromium = require("chromium");
 const { login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
 
 const app = express();
@@ -18,18 +17,25 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 let browser;
 
-// --- Launch persistent Chromium ---
-(async () => {
+// --- Launch persistent Chromium and wait for it before handling requests ---
+async function startBrowser() {
   browser = await puppeteer.launch({
     headless: true,
     executablePath: chromium.path,
-    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   });
   console.log("Persistent Chromium launched ✅");
-})();
+}
+startBrowser().catch(err => {
+  console.error("Failed to launch browser:", err);
+  process.exit(1); // stop server if browser fails
+});
 
 // --- Helper: run in incognito ---
 async function runInIncognito(fn) {
+  if (!browser) {
+    throw new Error("Browser not initialized yet.");
+  }
   const context = await browser.createIncognitoBrowserContext();
   const page = await context.newPage();
   try {
@@ -49,14 +55,11 @@ app.post("/get-attendance", async (req, res) => {
   try {
     const result = await runInIncognito(async (page) => {
       await login(page, username, password);
-
       const academicWithTargets = await fetchAcademic(page);
       const biometricAttendance = await fetchBiometric(page);
-
       return { academicWithTargets, biometricAttendance };
     });
 
-    // Send combined response
     res.json({ success: true, ...result });
 
     const now = new Date().toISOString();
@@ -89,4 +92,6 @@ app.get("/today-logins", async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("Server running ✅"));
+// --- Start server after Chromium is ready ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT} ✅`));
