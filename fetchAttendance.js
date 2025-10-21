@@ -1,56 +1,36 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium');
 
-// --- Launch Browser at login page ---
+// --- Launch Browser ---
 async function launchBrowser() {
   const browser = await puppeteer.launch({
     headless: true,
     executablePath: chromium.path,
     args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
   });
-
   const page = await browser.newPage();
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'domcontentloaded', timeout: 30000 });
   return { browser, page };
 }
 
-// --- Login (reuse page at login URL) ---
+// --- Login ---
 async function login(page, username, password) {
-  // Clear previous inputs if any
-  await page.evaluate(() => {
-    document.querySelector('input[name="txt_uname"]').value = '';
-    document.querySelector('input[name="txt_pwd"]').value = '';
-  });
-
+  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForSelector('input[name="txt_uname"]', { timeout: 10000 });
   await page.type('input[name="txt_uname"]', username, { delay: 1 });
   await page.type('input[name="txt_pwd"]', password, { delay: 1 });
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
   ]);
-
 }
 
-// --- Reset page to login for next user ---
-async function resetPageToLogin(page) {
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'domcontentloaded', timeout: 20000 });
-}
-
-// --- Fetch Academic Attendance ---
+// --- Fetch Academic Attendance (parallel extraction) ---
 async function fetchAcademic(page) {
-  // Wait for the attendance link to appear
-  await page.waitForSelector('a[href*="action=stud_att_STD"]', { timeout: 15000 });
-  
-  // Click the link
-  await Promise.all([
-    page.click('a[href*="action=stud_att_STD"]'),
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
-  ]);
+  await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
+  await page.waitForSelector('table tbody tr', { timeout: 10000 });
 
-  // Wait for table rows
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
-
-  const academicAttendance = await page.$$eval('table tbody tr', rows =>
+  // Extract rows in parallel
+  const academicAttendance = await page.$$eval('table tbody tr', rows => 
     Array.from(rows)
       .filter(row => row.querySelectorAll('td').length >= 8)
       .map(row => {
@@ -65,6 +45,7 @@ async function fetchAcademic(page) {
       })
   );
 
+  // Compute classesToAttendFor75 and classesCanBunk in parallel
   return academicAttendance.map(sub => ({
     ...sub,
     classesToAttendFor75: classesToReachTarget(sub.attended, sub.total),
@@ -72,11 +53,12 @@ async function fetchAcademic(page) {
   }));
 }
 
-// --- Fetch Biometric Attendance ---
+// --- Fetch Biometric Attendance (parallel computation) ---
 async function fetchBiometric(page) {
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'domcontentloaded', timeout: 20000 });
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
+  await page.waitForSelector('table tbody tr', { timeout: 10000 });
 
+  // Extract all rows in parallel
   const rows = await page.$$eval('table tbody tr', rows =>
     Array.from(rows).map(row => Array.from(row.querySelectorAll('td')).map(td => td.innerText.trim()))
   );
@@ -84,6 +66,7 @@ async function fetchBiometric(page) {
   const totalDays = rows.length - 1;
   const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
 
+  // Compute classes in parallel
   return {
     totalDays,
     presentCount,
@@ -92,7 +75,6 @@ async function fetchBiometric(page) {
     classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
   };
 }
-
 
 // --- Helpers ---
 function classesToReachTarget(attended, total, targetPercentage = 75) {
@@ -107,4 +89,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric, resetPageToLogin };
+module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
