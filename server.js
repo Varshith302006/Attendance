@@ -2,7 +2,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const { launchBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
+const { launchBrowser, login, fetchAllAttendance } = require("./fetchAttendance");
 
 const app = express();
 app.use(cors({ origin: "https://attendancedashboar.vercel.app" }));
@@ -11,7 +11,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // --- Supabase setup ---
 const supabaseUrl = "https://ywsqpuvraddaimlbiuds.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY"; // keep it secret
+const supabaseKey = "YOUR_SUPABASE_KEY"; // keep it secret
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- Launch Chromium at server start ---
@@ -40,29 +40,21 @@ app.post("/get-attendance", async (req, res) => {
     // Block images, fonts, stylesheets for speed
     await page.setRequestInterception(true);
     page.on('request', req => {
-      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
-        req.abort();
-      } else {
-        req.continue();
-      }
+      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) req.abort();
+      else req.continue();
     });
 
-    // --- Login ---
+    // --- Login & fetch all attendance in parallel ---
     await login(page, username, password);
+    const { academic, biometric } = await fetchAllAttendance(page);
 
-    // --- Fetch academic attendance ---
-    const academicWithTargets = await fetchAcademic(page);
-    res.write(JSON.stringify({ step: "academic", data: academicWithTargets }) + "\n");
-
-    // --- Fetch biometric attendance ---
-    const biometricAttendance = await fetchBiometric(page);
-    res.write(JSON.stringify({ step: "biometric", data: biometricAttendance }) + "\n");
-
+    res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
+    res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
     res.end();
 
     const now = new Date().toISOString();
 
-    // --- Save credentials to Supabase ---
+    // --- Save credentials ---
     const { error: credError } = await supabase
       .from("student_credentials")
       .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
@@ -98,11 +90,7 @@ app.get("/today-logins", async (req, res) => {
       .gte('visited_at', startOfDay.toISOString())
       .lte('visited_at', endOfDay.toISOString());
 
-    if (error) {
-      console.error("Supabase today-logins error:", error);
-      throw error;
-    }
-
+    if (error) throw error;
     res.json({ today_logins: count || 0 });
   } catch (err) {
     console.error("Error fetching today-logins:", err);
