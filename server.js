@@ -11,7 +11,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // --- Supabase setup ---
 const supabaseUrl = "https://ywsqpuvraddaimlbiuds.supabase.co";
-const supabaseKey = "YOUR_SERVICE_KEY"; // keep it secret
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY"; // keep it secret
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- Launch browser at server start ---
