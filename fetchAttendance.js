@@ -14,26 +14,24 @@ async function launchBrowser() {
 
 // --- Login ---
 async function login(page, username, password) {
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForSelector('input[name="txt_uname"]', { timeout: 10000 });
-  await page.type('input[name="txt_uname"]', username, { delay: 1 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 1 });
+  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
+  await page.type('input[name="txt_uname"]', username, { delay: 10 });
+  await page.type('input[name="txt_pwd"]', password, { delay: 10 });
   await Promise.all([
     page.click('#but_submit'),
-    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
+    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
   ]);
 }
 
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-  await page.waitForSelector('table tbody tr', { timeout: 10000 });
+  await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
-    Array.from(rows)
-      .filter(row => row.querySelectorAll('td').length >= 8)
-      .map(row => {
-        const cols = row.querySelectorAll('td');
+    rows.map(row => {
+      const cols = row.querySelectorAll('td');
+      if (cols.length >= 8) {
         return {
           courseCode: cols[1].innerText.trim(),
           subject: cols[2].innerText.trim(),
@@ -41,7 +39,8 @@ async function fetchAcademic(page) {
           attended: parseInt(cols[6].innerText.trim()),
           percentage: parseFloat(cols[7].innerText.trim())
         };
-      })
+      }
+    }).filter(Boolean)
   );
 
   return academicAttendance.map(sub => ({
@@ -53,32 +52,27 @@ async function fetchAcademic(page) {
 
 // --- Fetch Biometric Attendance ---
 async function fetchBiometric(page) {
-  await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'domcontentloaded', timeout: 20000 });
-  await page.waitForSelector('table tbody tr', { timeout: 10000 });
+  await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
   const rows = await page.$$eval('table tbody tr', rows =>
-    Array.from(rows).map(row => Array.from(row.querySelectorAll('td')).map(td => td.innerText.trim()))
+    rows.map(row => {
+      const cols = row.querySelectorAll('td');
+      return Array.from(cols).map(td => td.innerText.trim());
+    })
   );
 
-  const totalDays = rows.length - 1;
+  const totalDays = rows.length - 1; // exclude header
   const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
+  const percentage = totalDays > 0 ? (presentCount / totalDays) * 100 : 0;
 
   return {
     totalDays,
     presentCount,
-    percentage: Number(((presentCount / totalDays) * 100).toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
+    percentage: Number(percentage.toFixed(2)),
+    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
   };
-}
-
-// --- Parallel fetch helper ---
-async function fetchAllAttendance(page) {
-  const [academic, biometric] = await Promise.all([
-    fetchAcademic(page),
-    fetchBiometric(page)
-  ]);
-  return { academic, biometric };
 }
 
 // --- Helpers ---
@@ -94,4 +88,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric, fetchAllAttendance };
+module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
