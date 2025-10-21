@@ -32,19 +32,21 @@ startBrowser().catch(err => {
 });
 
 // --- Helper: run in incognito ---
-async function runInIncognito(fn) {
-  if (!browser) {
-    throw new Error("Browser not initialized yet.");
-  }
-  const context = await browser.createIncognitoBrowserContext();
-  const page = await context.newPage();
+async function runInIsolatedPage(fn) {
+  const page = await browser.newPage();
+
+  // Clear cookies/storage to make it behave like incognito
+  const client = await page.target().createCDPSession();
+  await client.send('Network.clearBrowserCookies');
+  await client.send('Network.clearBrowserCache');
+
   try {
     return await fn(page);
   } finally {
     await page.close();
-    await context.close();
   }
 }
+
 
 // --- Attendance Route ---
 app.post("/get-attendance", async (req, res) => {
@@ -53,7 +55,7 @@ app.post("/get-attendance", async (req, res) => {
     return res.status(400).json({ success: false, error: "Username and password required" });
 
   try {
-    const result = await runInIncognito(async (page) => {
+    const result = await runInIsolatedPage(async (page) => {
       await login(page, username, password);
       const academicWithTargets = await fetchAcademic(page);
       const biometricAttendance = await fetchBiometric(page);
