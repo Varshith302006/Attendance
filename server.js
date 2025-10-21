@@ -32,28 +32,31 @@ app.post("/get-attendance", async (req, res) => {
 
   let page;
   try {
+    // Open a new tab for this request
     page = await browserInstance.newPage();
 
-    // Block images, fonts, stylesheets for speed
+    // Block images, fonts, and stylesheets for speed
     await page.setRequestInterception(true);
     page.on('request', req => {
-      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) req.abort();
-      else req.continue();
+      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
+      }
     });
 
-    // Login first
+    // Login
     await login(page, username, password);
 
-    // Fetch academic and biometric attendance in parallel
-    const [academicWithTargets, biometricAttendance] = await Promise.all([
-      fetchAcademic(page),
-      fetchBiometric(page)
-    ]);
-
-    // Stream results immediately
+    // Fetch academic attendance
+    const academicWithTargets = await fetchAcademic(page);
     res.write(JSON.stringify({ step: "academic", data: academicWithTargets }) + "\n");
+
+    // Fetch biometric attendance
+    const biometricAttendance = await fetchBiometric(page);
     res.write(JSON.stringify({ step: "biometric", data: biometricAttendance }) + "\n");
-    res.end();
+
+    res.end(); // close response to client
 
     const now = new Date().toISOString();
 
@@ -76,7 +79,6 @@ app.post("/get-attendance", async (req, res) => {
     if (page) await page.close(); // close tab to free memory
   }
 });
-
 
 // --- Route: get today's login count ---
 app.get("/today-logins", async (req, res) => {
