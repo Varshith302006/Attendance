@@ -84,7 +84,10 @@ app.get("/today-logins", async (req, res) => {
       .gte('visited_at', startOfDay.toISOString())
       .lte('visited_at', endOfDay.toISOString());
 
-    if(error) throw error;
+    if(error){
+        console.error("Supabase today-logins error:", error);
+        throw error;
+    } 
 
     res.json({ today_logins: count || 0 });
   } catch(err) {
