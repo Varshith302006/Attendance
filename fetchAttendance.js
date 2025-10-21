@@ -29,7 +29,6 @@ async function login(page, username, password) {
     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
   ]);
 
-    await page.waitForSelector('div#main', { timeout: 15000 });
 }
 
 // --- Reset page to login for next user ---
