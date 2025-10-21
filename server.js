@@ -2,83 +2,68 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const puppeteer = require("puppeteer-core");
-const chromium = require("chromium");
-const { login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
+const { launchBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
 
 const app = express();
 app.use(cors({ origin: "https://attendancedashboar.vercel.app" }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// --- Supabase setup ---
 const supabaseUrl = "https://ywsqpuvraddaimlbiuds.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY"; // Keep service key private
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-let browser;
-
-// --- Launch persistent Chromium and wait for it before handling requests ---
-async function startBrowser() {
-  browser = await puppeteer.launch({
-    headless: true,
-    executablePath: chromium.path,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-  });
-  console.log("Persistent Chromium launched ✅");
-}
-startBrowser().catch(err => {
-  console.error("Failed to launch browser:", err);
-  process.exit(1); // stop server if browser fails
-});
-
-// --- Helper: run in incognito ---
-async function runInIsolatedPage(fn) {
-  const page = await browser.newPage();
-
-  // Clear cookies/storage to make it behave like incognito
-  const client = await page.target().createCDPSession();
-  await client.send('Network.clearBrowserCookies');
-  await client.send('Network.clearBrowserCache');
-
-  try {
-    return await fn(page);
-  } finally {
-    await page.close();
-  }
-}
-
-
-// --- Attendance Route ---
+// --- Route: fetch sequentially ---
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
     return res.status(400).json({ success: false, error: "Username and password required" });
 
+  let browser, page;
   try {
-    const result = await runInIsolatedPage(async (page) => {
-      await login(page, username, password);
-      const academicWithTargets = await fetchAcademic(page);
-      const biometricAttendance = await fetchBiometric(page);
-      return { academicWithTargets, biometricAttendance };
-    });
+    ({ browser, page } = await launchBrowser());
+    await login(page, username, password);
 
-    res.json({ success: true, ...result });
+    // --- Step 1: Academic Attendance ---
+    const academicWithTargets = await fetchAcademic(page);
+    res.write(JSON.stringify({ step: "academic", data: academicWithTargets }) + "\n");
+
+    // --- Step 2: Biometric Attendance ---
+    const biometricAttendance = await fetchBiometric(page);
+    res.write(JSON.stringify({ step: "biometric", data: biometricAttendance }) + "\n");
+
+    res.end(); // close response after both
 
     const now = new Date().toISOString();
-    await supabase.from("student_credentials").upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
-    await supabase.from("site_visits").insert([{ username, visited_at: now }]);
+
+    // --- Save credentials and visit to Supabase ---
+    const { error: credError } = await supabase
+      .from("student_credentials")
+      .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
+    if (credError) console.error("Supabase insert error:", credError);
+
+    // --- Record site visit for daily count ---
+    const { error: visitError } = await supabase
+      .from("site_visits")
+      .insert([{ username, visited_at: now }]);
+    if (visitError) console.error("Supabase visit insert error:", visitError);
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: err.message });
+  } finally {
+    if (browser) await browser.close();
   }
 });
 
-// --- Today login count ---
+// --- Route: get today's login count ---
 app.get("/today-logins", async (req, res) => {
   try {
-    const startOfDay = new Date(); startOfDay.setHours(0,0,0,0);
-    const endOfDay = new Date(); endOfDay.setHours(23,59,59,999);
+    const startOfDay = new Date();
+    startOfDay.setHours(0,0,0,0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23,59,59,999);
 
     const { count, error } = await supabase
       .from("site_visits")
@@ -87,6 +72,7 @@ app.get("/today-logins", async (req, res) => {
       .lte("visited_at", endOfDay.toISOString());
 
     if (error) throw error;
+
     res.json({ today_logins: count });
   } catch (err) {
     console.error(err);
@@ -94,6 +80,5 @@ app.get("/today-logins", async (req, res) => {
   }
 });
 
-// --- Start server after Chromium is ready ---
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT} ✅`));
+app.listen(process.env.PORT || 3000, () => console.log("Server running ✅"));
+

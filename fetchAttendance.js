@@ -1,16 +1,16 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium');
 
-// // --- Launch Browser ---
-// async function launchBrowser() {
-//   const browser = await puppeteer.launch({
-//     headless: true,
-//     executablePath: chromium.path,
-//     args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
-//   });
-//   const page = await browser.newPage();
-//   return { browser, page };
-// }
+// --- Launch Browser ---
+async function launchBrowser() {
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: chromium.path,
+    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
+  });
+  const page = await browser.newPage();
+  return { browser, page };
+}
 
 // --- Login ---
 async function login(page, username, password) {
@@ -88,4 +88,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { login, fetchAcademic, fetchBiometric };
+module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
