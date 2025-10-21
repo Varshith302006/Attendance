@@ -25,7 +25,6 @@ let browserInstance, blankPage;
   }
 })();
 
-// --- Route: fetch sequentially with streaming ---
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
@@ -33,40 +32,51 @@ app.post("/get-attendance", async (req, res) => {
 
   let page;
   try {
+    // Open a new tab for this request
     page = await browserInstance.newPage();
+
+    // Block images, fonts, and stylesheets for speed
+    await page.setRequestInterception(true);
+    page.on('request', req => {
+      if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    // Login
     await login(page, username, password);
 
-    // Step 1: Academic Attendance
+    // Fetch academic attendance
     const academicWithTargets = await fetchAcademic(page);
-    // Stream Academic data immediately
     res.write(JSON.stringify({ step: "academic", data: academicWithTargets }) + "\n");
 
-    // Step 2: Biometric Attendance (can take longer)
+    // Fetch biometric attendance
     const biometricAttendance = await fetchBiometric(page);
-    // Stream Biometric data immediately after fetching
     res.write(JSON.stringify({ step: "biometric", data: biometricAttendance }) + "\n");
 
-    res.end(); // close response
+    res.end(); // close response to client
 
     const now = new Date().toISOString();
 
-    // --- Save credentials and visit to Supabase ---
+    // Save credentials to Supabase
     const { error: credError } = await supabase
       .from("student_credentials")
       .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
     if (credError) console.error("Supabase insert error:", credError);
 
-    // --- Record site visit for daily count ---
+    // Record site visit
     const { error: visitError } = await supabase
       .from("site_visits")
       .insert([{ username, visited_at: now }]);
     if (visitError) console.error("Supabase visit insert error:", visitError);
 
   } catch (err) {
-    console.error(err);
+    console.error("Attendance fetch error:", err);
     res.status(500).json({ success: false, error: err.message });
   } finally {
-    if (page) await page.close();
+    if (page) await page.close(); // close tab to free memory
   }
 });
 
