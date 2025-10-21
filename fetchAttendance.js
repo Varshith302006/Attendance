@@ -28,6 +28,8 @@ async function login(page, username, password) {
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
   ]);
+
+    await page.waitForSelector('div#main', { timeout: 15000 });
 }
 
 // --- Reset page to login for next user ---
@@ -37,8 +39,17 @@ async function resetPageToLogin(page) {
 
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
-  await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-  await page.waitForSelector('table tbody tr', { timeout: 10000 });
+  // Wait for the attendance link to appear
+  await page.waitForSelector('a[href*="action=stud_att_STD"]', { timeout: 15000 });
+  
+  // Click the link
+  await Promise.all([
+    page.click('a[href*="action=stud_att_STD"]'),
+    page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 })
+  ]);
+
+  // Wait for table rows
+  await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     Array.from(rows)
@@ -65,7 +76,7 @@ async function fetchAcademic(page) {
 // --- Fetch Biometric Attendance ---
 async function fetchBiometric(page) {
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'domcontentloaded', timeout: 20000 });
-  await page.waitForSelector('table tbody tr', { timeout: 10000 });
+  await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
   const rows = await page.$$eval('table tbody tr', rows =>
     Array.from(rows).map(row => Array.from(row.querySelectorAll('td')).map(td => td.innerText.trim()))
@@ -82,6 +93,7 @@ async function fetchBiometric(page) {
     classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
   };
 }
+
 
 // --- Helpers ---
 function classesToReachTarget(attended, total, targetPercentage = 75) {
