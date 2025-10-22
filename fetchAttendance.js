@@ -15,8 +15,8 @@ async function launchBrowser() {
 // --- Login ---
 async function login(page, username, password) {
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
-  await page.type('input[name="txt_uname"]', username, { delay: 10 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 10 });
+  await page.type('input[name="txt_uname"]', username, { delay: 1 });
+  await page.type('input[name="txt_pwd"]', password, { delay: 1 });
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
@@ -89,3 +89,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
+
