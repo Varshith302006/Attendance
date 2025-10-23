@@ -36,11 +36,11 @@ app.post("/get-attendance", async (req, res) => {
   if (!username || !password)
     return res.status(400).json({ success: false, error: "Username and password required" });
 
-  const { context, page } = await createUserPage(browser); // isolated session
+  const { page } = await createUserPage(); // open a new tab
   try {
     await login(page, username, password);
 
-    // Fetch academic and biometric attendance in parallel
+    // Fetch academic and biometric attendance
     const [academic, biometric] = await Promise.all([
       fetchAcademic(page),
       fetchBiometric(page)
@@ -64,7 +64,7 @@ app.post("/get-attendance", async (req, res) => {
     console.error(err);
     res.status(500).json({ success: false, error: err.message });
   } finally {
-    await context.close(); // safely close this user's session
+    await page.close(); // close only this tab, browser stays alive
   }
 });
 
