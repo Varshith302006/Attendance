@@ -34,8 +34,8 @@ async function getPage() {
 // --- Login ---
 async function login(page, username, password) {
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
-  await page.type('input[name="txt_uname"]', username, { delay: 0 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 0 });
+  await page.type('input[name="txt_uname"]', username, { delay: 1 });
+  await page.type('input[name="txt_pwd"]', password, { delay: 1 });
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
@@ -45,7 +45,12 @@ async function login(page, username, password) {
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
+  try{
+      await page.waitForSelector('table tbody tr', { timeout: 15000 });
+  } catch (err) {
+  console.error("Academic table not found:", err.message);
+  return []; // return empty array instead of crashing
+}
 
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
@@ -105,3 +110,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { getPage, login, fetchAcademic, fetchBiometric };
+
