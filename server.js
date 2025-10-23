@@ -14,8 +14,8 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // --- Supabase setup ---
 // Use environment variables for security
-const supabaseUrl = process.env.https://ywsqpuvraddaimlbiuds.supabase.co;
-const supabaseKey = process.env.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY;
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- Route: fetch attendance sequentially ---
@@ -92,4 +92,3 @@ app.get("/today-logins", async (req, res) => {
 // --- Start server ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running ✅ on port ${PORT}`));
-
