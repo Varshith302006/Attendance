@@ -22,10 +22,11 @@ app.post("/get-attendance", async (req, res) => {
 
   let page;
   try {
-    page = await getPage();          // New isolated page
+    console.log("Opening new page for user:", username);
+    page = await getPage();
     await login(page, username, password);
 
-    // Fetch Academic & Biometric in parallel
+    // Fetch academic and biometric data concurrently
     const [academicData, biometricData] = await Promise.all([
       fetchAcademic(page),
       fetchBiometric(page)
@@ -33,18 +34,23 @@ app.post("/get-attendance", async (req, res) => {
 
     res.json({ academic: academicData, biometric: biometricData });
 
-    // Save credentials & site visit
+    // Save credentials & visit
     const now = new Date().toISOString();
-    await supabase.from("student_credentials").upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
-    await supabase.from("site_visits").insert([{ username, visited_at: now }]);
+    try {
+      await supabase.from("student_credentials").upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
+      await supabase.from("site_visits").insert([{ username, visited_at: now }]);
+    } catch (err) {
+      console.error("Supabase insert error:", err.message);
+    }
 
   } catch (err) {
-    console.error(err);
+    console.error("Attendance fetch failed:", err.message);
     res.status(500).json({ success: false, error: err.message });
   } finally {
     if (page) {
-      await page.goto("about:blank"); // reset page state
-      await page.close();             // close page, browser stays alive
+      await page.goto("about:blank");
+      await page.close();
+      console.log("Closed page for user:", username);
     }
   }
 });
