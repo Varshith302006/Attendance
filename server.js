@@ -41,10 +41,8 @@ app.post("/get-attendance", async (req, res) => {
     await login(page, username, password);
 
     // Fetch academic and biometric attendance
-    const [academic, biometric] = await Promise.all([
-      fetchAcademic(page),
-      fetchBiometric(page)
-    ]);
+const academic = await fetchAcademic(page);  // FIRST
+const biometric = await fetchBiometric(page); // THEN
 
     res.json({ academic, biometric });
 
@@ -93,3 +91,4 @@ app.get("/today-logins", async (req, res) => {
 // --- Start server ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running ✅ on port ${PORT}`));
+
