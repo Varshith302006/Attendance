@@ -1,23 +1,31 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium');
 
-// --- Launch Browser ---
+// --- Launch Browser once ---
+let browser;
 async function launchBrowser() {
-      console.log("open");
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: chromium.path,
-    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
-  });
-  const page = await browser.newPage();
-  return { browser, page };
+  if (!browser) {
+    console.log("Launching browser...");
+    browser = await puppeteer.launch({
+      headless: true, // set false if you want to see the browser
+      executablePath: chromium.path,
+      args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
+    });
+  }
+  return browser;
+}
+
+// --- Create isolated page for each user ---
+async function createUserPage() {
+  const browser = await launchBrowser();
+  const context = await browser.createIncognitoBrowserContext(); // isolated session
+  const page = await context.newPage();
+  return { context, page };
 }
 
 // --- Login ---
 async function login(page, username, password) {
-  console.log("sam");
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
-  console.log("type");
+  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle2', timeout: 60000 });
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
   await Promise.all([
@@ -28,10 +36,8 @@ async function login(page, username, password) {
 
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
-  console.log("aao");
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-console.log("ta");
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -56,18 +62,13 @@ console.log("ta");
 
 // --- Fetch Biometric Attendance ---
 async function fetchBiometric(page) {
-  console.log("bioo");
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-console.log("tabio");
   const rows = await page.$$eval('table tbody tr', rows =>
-    rows.map(row => {
-      const cols = row.querySelectorAll('td');
-      return Array.from(cols).map(td => td.innerText.trim());
-    })
+    rows.map(row => Array.from(row.querySelectorAll('td')).map(td => td.innerText.trim()))
   );
 
-  const totalDays = rows.length - 1; // exclude header
+  const totalDays = rows.length - 1;
   const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
   const percentage = totalDays > 0 ? (presentCount / totalDays) * 100 : 0;
 
@@ -75,8 +76,8 @@ console.log("tabio");
     totalDays,
     presentCount,
     percentage: Number(percentage.toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
+    classesCanBunk: classesCanBunk(presentCount, totalDays),
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
   };
 }
 
@@ -93,6 +94,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
-
-
+module.exports = { launchBrowser, createUserPage, login, fetchAcademic, fetchBiometric };
