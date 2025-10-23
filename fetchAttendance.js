@@ -4,6 +4,7 @@ const chromium = require('chromium');
 // --- Launch Browser ---
 async function launchBrowser() {
   const browser = await puppeteer.launch({
+    console.log("open");
     headless: true,
     executablePath: chromium.path,
     args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
@@ -14,7 +15,9 @@ async function launchBrowser() {
 
 // --- Login ---
 async function login(page, username, password) {
+  console.log("sam");
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
+  console.log("type");
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
   await Promise.all([
@@ -25,9 +28,10 @@ async function login(page, username, password) {
 
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
+  console.log("aao");
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-
+console.log("ta");
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -52,9 +56,10 @@ async function fetchAcademic(page) {
 
 // --- Fetch Biometric Attendance ---
 async function fetchBiometric(page) {
+  console.log("bioo");
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-
+console.log("tabio");
   const rows = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -89,3 +94,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
+
