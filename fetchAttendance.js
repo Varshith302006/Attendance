@@ -33,7 +33,9 @@ async function getPage() {
 
 // --- Login ---
 async function login(page, username, password) {
+  console.log("Navigating to login page...");
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
+  console.log("Typing credentials...");
   await page.type('input[name="txt_uname"]', username, { delay: 1 });
   await page.type('input[name="txt_pwd"]', password, { delay: 1 });
   await Promise.all([
@@ -110,4 +112,5 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { getPage, login, fetchAcademic, fetchBiometric };
+
 
