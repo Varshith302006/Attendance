@@ -1,15 +1,34 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium');
 
-// --- Launch Browser ---
-async function launchBrowser() {
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: chromium.path,
-    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
-  });
+let browser; // Persistent browser
+
+// --- Launch persistent browser ---
+async function getBrowser() {
+  if (!browser) {
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: chromium.path,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    });
+  }
+  return browser;
+}
+
+// --- Create a new page per request (isolated session) ---
+async function getPage() {
+  const browser = await getBrowser();
   const page = await browser.newPage();
-  return { browser, page };
+
+  // Block images, fonts, and stylesheets for faster load
+  await page.setRequestInterception(true);
+  page.on('request', req => {
+    const type = req.resourceType();
+    if (["image", "stylesheet", "font"].includes(type)) req.abort();
+    else req.continue();
+  });
+
+  return page;
 }
 
 // --- Login ---
@@ -56,10 +75,7 @@ async function fetchBiometric(page) {
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
   const rows = await page.$$eval('table tbody tr', rows =>
-    rows.map(row => {
-      const cols = row.querySelectorAll('td');
-      return Array.from(cols).map(td => td.innerText.trim());
-    })
+    rows.map(row => Array.from(row.querySelectorAll('td')).map(td => td.innerText.trim()))
   );
 
   const totalDays = rows.length - 1; // exclude header
@@ -70,12 +86,12 @@ async function fetchBiometric(page) {
     totalDays,
     presentCount,
     percentage: Number(percentage.toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
+    classesCanBunk: classesCanBunk(presentCount, totalDays),
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
   };
 }
 
-// --- Helpers ---
+// --- Helper Functions ---
 function classesToReachTarget(attended, total, targetPercentage = 75) {
   const targetDecimal = targetPercentage / 100;
   const x = Math.ceil((targetDecimal * total - attended) / (1 - targetDecimal));
@@ -88,6 +104,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
-
-
+module.exports = { getPage, login, fetchAcademic, fetchBiometric };
