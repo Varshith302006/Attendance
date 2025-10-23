@@ -2,67 +2,69 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const { launchBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
+const {
+  launchBrowser,
+  createUserPage,
+  login,
+  fetchAcademic,
+  fetchBiometric
+} = require("./fetchAttendance");
 
 const app = express();
 
 // --- CORS ---
-// Use environment variable for frontend origin
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // --- Supabase setup ---
-// Use environment variables for security
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- Route: fetch attendance sequentially ---
+// --- Launch browser once at server start ---
+let browser;
+(async () => {
+  browser = await launchBrowser();
+  console.log("Chromium browser launched ✅");
+})();
+
+// --- Route: fetch attendance ---
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body;
+
   if (!username || !password)
     return res.status(400).json({ success: false, error: "Username and password required" });
 
-  let browser, page;
+  const { context, page } = await createUserPage(browser); // isolated session
   try {
-    // Puppeteer launch with cloud-friendly flags
-    ({ browser, page } = await launchBrowser({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }));
-    
     await login(page, username, password);
 
-    // --- Step 1: Academic Attendance ---
-    const academicWithTargets = await fetchAcademic(page);
-    res.write(JSON.stringify({ step: "academic", data: academicWithTargets }) + "\n");
+    // Fetch academic and biometric attendance in parallel
+    const [academic, biometric] = await Promise.all([
+      fetchAcademic(page),
+      fetchBiometric(page)
+    ]);
 
-    // --- Step 2: Biometric Attendance ---
-    const biometricAttendance = await fetchBiometric(page);
-    res.write(JSON.stringify({ step: "biometric", data: biometricAttendance }) + "\n");
+    res.json({ academic, biometric });
 
-    res.end(); // close response after both
-
+    // --- Async Supabase logging ---
     const now = new Date().toISOString();
-
-    // --- Save credentials to Supabase ---
-    const { error: credError } = await supabase
+    supabase
       .from("student_credentials")
-      .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
-    if (credError) console.error("Supabase insert error:", credError);
+      .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] })
+      .catch(console.error);
 
-    // --- Record site visit ---
-    const { error: visitError } = await supabase
+    supabase
       .from("site_visits")
-      .insert([{ username, visited_at: now }]);
-    if (visitError) console.error("Supabase visit insert error:", visitError);
+      .insert([{ username, visited_at: now }])
+      .catch(console.error);
 
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: err.message });
   } finally {
-    if (browser) await browser.close();
+    await context.close(); // safely close this user's session
   }
 });
 
@@ -81,7 +83,6 @@ app.get("/today-logins", async (req, res) => {
       .lte("visited_at", endOfDay.toISOString());
 
     if (error) throw error;
-
     res.json({ today_logins: count });
   } catch (err) {
     console.error(err);
@@ -92,4 +93,3 @@ app.get("/today-logins", async (req, res) => {
 // --- Start server ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running ✅ on port ${PORT}`));
-
