@@ -1,7 +1,8 @@
 const http = require('http');
 const https = require('https');
 
-const URL = process.env.https://attendance-4rm8.onrender.com; // Render app URL
+// Use an environment variable name instead of a literal URL
+const URL = process.env.APP_URL; // Set APP_URL in Render environment variables
 const INTERVAL = 5 * 60 * 1000; // every 5 minutes
 
 if (!URL) {
