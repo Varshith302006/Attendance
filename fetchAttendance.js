@@ -5,22 +5,21 @@ const chromium = require('chromium');
 let browser;
 async function launchBrowser() {
   if (!browser) {
-    console.log("Launching browser...");
+    console.log("Launching Chromium...");
     browser = await puppeteer.launch({
-      headless: true, // set false if you want to see the browser
+      headless: true,
       executablePath: chromium.path,
-      args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
     });
   }
   return browser;
 }
 
-// --- Create isolated page for each user ---
+// --- Create new tab/page per user ---
 async function createUserPage() {
   const browser = await launchBrowser();
-  const context = await browser.createIncognitoBrowserContext(); // isolated session
-  const page = await context.newPage();
-  return { context, page };
+  const page = await browser.newPage();  // new tab in the default context
+  return { page };
 }
 
 // --- Login ---
