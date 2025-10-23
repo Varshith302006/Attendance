@@ -7,6 +7,8 @@
     "puppeteer-core": "^22.6.2"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "keep-alive": "node keepAlive.js",
+  "start-all": "sh -c \"node server.js & node keepAlive.js\""
   }
 }
