@@ -3,8 +3,8 @@ const chromium = require('chromium');
 
 // --- Launch Browser ---
 async function launchBrowser() {
+      console.log("open");
   const browser = await puppeteer.launch({
-    console.log("open");
     headless: true,
     executablePath: chromium.path,
     args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
@@ -94,4 +94,5 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
+
 
