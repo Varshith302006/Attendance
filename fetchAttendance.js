@@ -1,12 +1,20 @@
 const puppeteer = require('puppeteer-core');
 const chromium = require('chromium');
 
-// (launchBrowser not needed with cluster)
+// --- Launch Browser ---
+async function launchBrowser() {
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: chromium.path,
+    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
+  });
+  const page = await browser.newPage();
+  return { browser, page };
+}
 
+// --- Login ---
 async function login(page, username, password) {
-  console.log("sam");
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle2', timeout: 60000 });
-  console.log("type");
+  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
   await Promise.all([
@@ -15,11 +23,11 @@ async function login(page, username, password) {
   ]);
 }
 
+// --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
-  console.log("aao");
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-  console.log("ta");
+
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -42,11 +50,11 @@ async function fetchAcademic(page) {
   }));
 }
 
+// --- Fetch Biometric Attendance ---
 async function fetchBiometric(page) {
-  console.log("bioo");
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-  console.log("tabio");
+
   const rows = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -62,11 +70,12 @@ async function fetchBiometric(page) {
     totalDays,
     presentCount,
     percentage: Number(percentage.toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
+    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
   };
 }
 
+// --- Helpers ---
 function classesToReachTarget(attended, total, targetPercentage = 75) {
   const targetDecimal = targetPercentage / 100;
   const x = Math.ceil((targetDecimal * total - attended) / (1 - targetDecimal));
@@ -79,4 +88,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { login, fetchAcademic, fetchBiometric };
+module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
