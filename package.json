@@ -9,6 +9,7 @@
     "@supabase/supabase-js": "^2.42.3"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+      "start-all": "node server.js & node keepAlive.js"
   }
 }
