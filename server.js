@@ -5,7 +5,11 @@ const { createClient } = require("@supabase/supabase-js");
 const { initBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
 
 const app = express();
-app.use(cors({ origin: "https://attendancedashboar.vercel.app" }));
+app.use(cors({
+  origin: "*",
+  methods: "GET, POST, OPTIONS",
+  allowedHeaders: "Content-Type, Authorization",
+}));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -66,3 +70,4 @@ app.get("/today-logins", async (req, res) => {
 });
 
 app.listen(process.env.PORT || 3000, () => {});
+
