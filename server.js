@@ -178,11 +178,17 @@ app.post("/get-attendance", async (req, res) => {
       const isFresh = fetchedAt && ageMs < 24 * 60 * 60 * 1000; // < 24 hours
 
       // Return cache only if password matches AND data present AND fresh
-      if (existing.password === password && hasAcademic && hasBiometric && isFresh) {
+     if (existing.password === password && hasAcademic && hasBiometric && isFresh) {
+        // Record site visit
+        await supabase
+          .from("site_visits")
+          .insert([{ username, visited_at: new Date().toISOString() }]);
+      
         res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
         res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
         return res.end();
       }
+
     }
 
     // 3) Need to do live fetch (cache missing/expired or password mismatch or user doesn't exist)
@@ -233,10 +239,16 @@ app.post("/get-attendance", async (req, res) => {
       await supabase.from("student_credentials").insert([insertRow]);
     }
 
+       // Record site visit
+    await supabase
+      .from("site_visits")
+      .insert([{ username, visited_at: new Date().toISOString() }]);
+    
     // 5) Stream fresh data to frontend (each as its own JSON object)
     res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
     res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
     res.end();
+
 
   } catch (err) {
     res.write(JSON.stringify({ step: "error", data: { error: err?.message || "Internal server error" } }) + "\n");
