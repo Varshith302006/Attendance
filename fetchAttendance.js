@@ -1,42 +1,40 @@
-const puppeteer = require('puppeteer-core');
-const chromium = require('chromium');
+const puppeteer = require("puppeteer-core");
+const chromium = require("chromium");
 
-// --- Launch Browser ---
-async function launchBrowser() {
-  const browser = await puppeteer.launch({
+let browser = null;
+let page = null;
+
+// --- Launch Browser (only once, auto-reuse) ---
+async function initBrowser() {
+  if (browser && page) return { browser, page }; // reuse if already running
+
+  browser = await puppeteer.launch({
     headless: true,
     executablePath: chromium.path,
-    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
   });
-  const page = await browser.newPage();
 
-  // PRELOAD SAMVIDHA BEFORE USERNAME/PASSWORD ENTRY
-   console.log("🌐 Loading Samvidha login page...");
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
-    console.log("✅ Samvidha login page loaded.");
-
+  page = await browser.newPage();
+  await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle0", timeout: 60000 });
   return { browser, page };
 }
-
 
 // --- Login ---
 async function login(page, username, password) {
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
-    console.log("🔐 Submitting login form...");
+
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
   ]);
-       console.log("✅ Login successful.");
-
 }
 
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-console.log("📘 Fetching Academic Attendance...");
+
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -71,7 +69,7 @@ async function fetchBiometric(page) {
     })
   );
 
-  const totalDays = rows.length - 1; // exclude header
+  const totalDays = rows.length - 1;
   const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
   const percentage = totalDays > 0 ? (presentCount / totalDays) * 100 : 0;
 
@@ -79,8 +77,8 @@ async function fetchBiometric(page) {
     totalDays,
     presentCount,
     percentage: Number(percentage.toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
+    classesCanBunk: classesCanBunk(presentCount, totalDays),
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
   };
 }
 
@@ -97,7 +95,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
-
-
-
+module.exports = { initBrowser, login, fetchAcademic, fetchBiometric };
