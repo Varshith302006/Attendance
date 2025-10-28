@@ -3,7 +3,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { initBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
-
+const fs = require('fs');
 const app = express();
 app.use(cors({
   origin: "https://attendancedashboar.vercel.app", // your frontend
@@ -17,10 +17,21 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const supabaseUrl = "https://ywsqpuvraddaimlbiuds.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY";
 const supabase = createClient(supabaseUrl, supabaseKey);
+const LOG_FILE = './cron-job.log';
+function initLogFile() {
+  fs.writeFileSync(LOG_FILE, `=== CRON Run: ${new Date().toISOString()} ===\n`);
+}
 
+function logEvent(event, details = {}) {
+  const entry = { time: new Date().toISOString(), event, ...details };
+  const line = JSON.stringify(entry);
+  console.log(line);
+  fs.appendFileSync(LOG_FILE, line + '\n');
+}
 // Silent safe /run-cron endpoint — ONE-BY-ONE queue, 3s delay, retry once, SKIP failures
 app.get("/run-cron", async (req, res) => {
   const start = Date.now();
+  initLogFile(); // Clear log for each run
 
   try {
     // 1) Fetch users
@@ -28,9 +39,12 @@ app.get("/run-cron", async (req, res) => {
       .from("student_credentials")
       .select("Id, username, password");
 
-    if (fetchErr) throw fetchErr;
+    if (fetchErr) {
+      logEvent('fetch-users-error', { error: fetchErr.message });
+      throw fetchErr;
+    }
     if (!users || users.length === 0) {
-      console.log(`[run-cron] No users found.`);
+      logEvent('no-users');
       return res.json({ success: true, message: "No students to process", processed: 0 });
     }
 
@@ -41,23 +55,23 @@ app.get("/run-cron", async (req, res) => {
     let succeeded = 0;
     let skipped = 0;
 
-    console.log(`\n===== 🕒 Starting CRON for ${users.length} students =====\n`);
+    logEvent('cron-start', { user_count: users.length });
 
     for (const user of users) {
       processed++;
-      console.log(`🔄 Fetching ${user.username} ...`);
+      logEvent('user-start', { username: user.username });
 
       // skip if missing creds
       if (!user.username || !user.password) {
         skipped++;
-        console.log(`⚠️ Skipped ${user.username} — missing credentials`);
+        logEvent('user-skipped', { username: user.username, reason: 'missing credentials' });
         await supabase
           .from("student_credentials")
           .update({ fetched_at: new Date().toISOString() })
           .eq("Id", user.Id)
           .catch(() => {});
         await wait(3000);
-        console.log(`----------------------------------`);
+        logEvent('user-end', { username: user.username, status: 'skipped' });
         continue;
       }
 
@@ -69,7 +83,9 @@ app.get("/run-cron", async (req, res) => {
               waitUntil: "networkidle2",
               timeout: 45000,
             });
-          } catch {}
+          } catch (gotoErr) {
+            logEvent('goto-error', { username: user.username, attempt });
+          }
 
           await login(page, user.username, user.password);
 
@@ -77,40 +93,42 @@ app.get("/run-cron", async (req, res) => {
           const biometric = await fetchBiometric(page);
 
           await supabase
-          .from("student_credentials")
-          .update({
-            academic_data: academic,        // ← directly JSON
-            biometric_data: biometric,      // ← directly JSON
-            fetched_at: new Date().toISOString(),
-          })
-          .eq("Id", user.Id);
+            .from("student_credentials")
+            .update({
+              academic_data: academic,
+              biometric_data: biometric,
+              fetched_at: new Date().toISOString(),
+            })
+            .eq("Id", user.Id);
 
-
-          console.log(`✅ Success — updated ${user.username}`);
+          logEvent('user-success', { username: user.username });
           ok = true;
           succeeded++;
           break;
         } catch (err) {
           if (attempt === 2) {
-            console.log(`❌ Failed ${user.username} after 2 attempts — skipped`);
+            logEvent('user-failed', { username: user.username, attempt, error: err.message });
             skipped++;
           } else {
-            console.log(`⚠️ Attempt ${attempt} failed for ${user.username}, retrying...`);
+            logEvent('user-retry', { username: user.username, attempt, error: err.message });
             await wait(3000);
           }
         }
       }
 
-      console.log(`----------------------------------`);
+      logEvent('user-end', { username: user.username, status: ok ? 'success' : 'failed' });
       await wait(3000);
     }
 
     await browser.close();
 
     const elapsedMs = Date.now() - start;
-    console.log(
-      `\n✅ Completed CRON. processed=${processed}, succeeded=${succeeded}, skipped=${skipped}, time=${Math.round(elapsedMs / 1000)}s`
-    );
+    logEvent('cron-complete', {
+      processed,
+      succeeded,
+      skipped,
+      time_seconds: Math.round(elapsedMs / 1000),
+    });
 
     return res.json({
       success: true,
@@ -121,7 +139,7 @@ app.get("/run-cron", async (req, res) => {
       time_seconds: Math.round(elapsedMs / 1000),
     });
   } catch (err) {
-    console.error(`[run-cron] Fatal error:`, err.message || err);
+    logEvent('cron-fatal', { error: err.message });
     return res.status(500).json({ success: false, message: err.message || "Internal error" });
   }
 });
