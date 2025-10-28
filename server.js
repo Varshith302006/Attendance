@@ -127,7 +127,7 @@ app.get("/run-cron", async (req, res) => {
 
 
 
-// POST /get-attendance — final implementation
+// POST /get-attendance (final)
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body || {};
 
@@ -136,7 +136,7 @@ app.post("/get-attendance", async (req, res) => {
   }
 
   try {
-    // 1) Try to find existing user by username
+    // 1) Look up user in Supabase
     const { data: existing, error: selErr } = await supabase
       .from("student_credentials")
       .select("Id, username, password, academic_data, biometric_data, fetched_at")
@@ -147,7 +147,7 @@ app.post("/get-attendance", async (req, res) => {
 
     const now = new Date();
 
-    // 2) Decide if we can return cached data:
+    // 2) If user exists, check cache validity (< 24 hours) and presence of both datasets
     if (existing) {
       const hasAcademic = existing.academic_data !== null && existing.academic_data !== undefined;
       const hasBiometric = existing.biometric_data !== null && existing.biometric_data !== undefined;
@@ -155,9 +155,9 @@ app.post("/get-attendance", async (req, res) => {
       const ageMs = fetchedAt ? (now - fetchedAt) : Infinity;
       const isFresh = fetchedAt && ageMs < 24 * 60 * 60 * 1000; // < 24 hours
 
-      // Return cache only if password matches, both data exist, and fetched_at < 24h
+      // Return cache only if password matches AND data present AND fresh
       if (existing.password === password && hasAcademic && hasBiometric && isFresh) {
-        // Plain response with fields named exactly as requested
+        // Plain response keys as requested
         return res.json({
           academic_data: existing.academic_data,
           biometric_data: existing.biometric_data
@@ -165,45 +165,45 @@ app.post("/get-attendance", async (req, res) => {
       }
     }
 
-    // 3) Otherwise -> perform live fetch (Puppeteer)
+    // 3) Need to do live fetch (cache missing/expired or password mismatch or user doesn't exist)
+    // Attempt login+fetch. If login fails -> return 401 and DO NOT save anything for existing/non-existing user.
     let academic = null;
     let biometric = null;
-
     try {
       const { browser, page } = await initBrowser();
 
-      // navigate to home/login to reset state (best-effort)
+      // best-effort navigate to reset state
       try { await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 45000 }); } catch (e) {}
 
-      // attempt login (this should throw if credentials wrong / blocked)
+      // attempt login - may throw on bad credentials or site block
       await login(page, username, password);
 
-      // fetch attendance data
+      // fetch attendance
       academic = await fetchAcademic(page);
       biometric = await fetchBiometric(page);
 
-      // do not close browser here — your initBrowser may manage reuse
+      // Do not forcibly close browser if your initBrowser is designed for reuse.
     } catch (liveErr) {
-      // login/fetch failed — treat as invalid credentials / site blocked
-      console.error("[/get-attendance] live fetch failed:", liveErr?.message || liveErr);
+      console.error("[/get-attendance] live fetch/login failed:", liveErr?.message || liveErr);
+      // Return 401 for invalid creds / blocked
       return res.status(401).json({ error: "Invalid credentials or site blocked (login failed)" });
     }
 
-    // 4) Persist results to Supabase
+    // 4) Persist results to Supabase (JSONB fields) - do not overwrite password for existing users
     const payload = {
-      academic_data: academic ?? null,   // JSONB
+      academic_data: academic ?? null,
       biometric_data: biometric ?? null,
       fetched_at: new Date().toISOString()
     };
 
     if (existing) {
-      // Update existing row: do NOT overwrite password
+      // Update existing row (do NOT change password)
       await supabase
         .from("student_credentials")
         .update(payload)
         .eq("Id", existing.Id);
     } else {
-      // Insert new row (save password on insert)
+      // Insert new row and save password
       const insertRow = {
         username,
         password,
@@ -214,14 +214,14 @@ app.post("/get-attendance", async (req, res) => {
       await supabase.from("student_credentials").insert([insertRow]);
     }
 
-    // 5) Return the live-fetched data (plain fields)
+    // 5) Return fresh data to frontend (plain fields)
     return res.json({
       academic_data: academic,
       biometric_data: biometric
     });
 
   } catch (err) {
-    console.error("[/get-attendance] error:", err);
+    console.error("[/get-attendance] fatal:", err);
     return res.status(500).json({ error: err?.message || "Internal server error" });
   }
 });
