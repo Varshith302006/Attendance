@@ -128,38 +128,114 @@ app.get("/run-cron", async (req, res) => {
 
 
 
+// POST /get-attendance
 app.post("/get-attendance", async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ success: false, error: "Username and password required" });
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ success: false, message: "username and password required" });
+  }
 
   try {
-    const { browser, page } = await initBrowser(); // 🚀 Always ready (persistent)
+    // 1) try to find user in Supabase
+    const { data: existing, error: selErr } = await supabase
+      .from("student_credentials")
+      .select("Id, username, password, academic_data, biometric_data, fetched_at")
+      .eq("username", username)
+      .maybeSingle();
 
-    await login(page, username, password);
+    if (selErr) throw selErr;
 
-    const academicWithTargets = await fetchAcademic(page);
-    res.write(JSON.stringify({ step: "academic", data: academicWithTargets }) + "\n");
+    const now = new Date();
+    let useCache = false;
+    if (existing) {
+      // if stored password matches the provided one and data exists and fetched_at < 24h
+      const hasAcademic = existing.academic_data !== null && existing.academic_data !== undefined;
+      const hasBiometric = existing.biometric_data !== null && existing.biometric_data !== undefined;
+      const fetchedAt = existing.fetched_at ? new Date(existing.fetched_at) : null;
+      const ageMs = fetchedAt ? (now - fetchedAt) : Infinity;
+      const isFresh = fetchedAt && ageMs < 24 * 60 * 60 * 1000; // < 24 hours
 
-    const biometricAttendance = await fetchBiometric(page);
-    res.write(JSON.stringify({ step: "biometric", data: biometricAttendance }) + "\n");
+      if (existing.password === password && hasAcademic && hasBiometric && isFresh) {
+        useCache = true;
+      }
+    }
 
-    res.end();
+    if (useCache && existing) {
+      // Return cached data (Supabase returns JSONB as objects)
+      return res.json({
+        success: true,
+        source: "supabase",
+        academic: existing.academic_data,
+        biometric: existing.biometric_data,
+        fetched_at: existing.fetched_at
+      });
+    }
 
-    const now = new Date().toISOString();
+    // 2) Need to fetch live (either not found, password mismatch, missing data, or stale)
+    // Choose fetch implementation dynamically:
+    let academic, biometric;
 
-    await supabase.from("student_credentials")
-      .upsert([{ username, password, fetched_at: now }], { onConflict: ["username"] });
+    if (typeof fetchAttendance === "function") {
+      // If module exports single convenience function: fetchAttendance(username, password)
+      const result = await fetchAttendance(username, password);
+      // Expecting result to be { academic, biometric } or similar
+      if (result) {
+        academic = result.academic ?? result.academic_data ?? result.academicData ?? result.academic_data;
+        biometric = result.biometric ?? result.biometric_data ?? result.biometricData ?? result.biometric_data;
+      }
+    }
 
-    await supabase.from("site_visits").insert([{ username, visited_at: now }]);
+    // fallback to separate functions if fetchAttendance not present or didn't return objects
+    if (!academic || !biometric) {
+      // ensure browser/page is initialised by your initBrowser
+      const { browser, page } = await initBrowser();
+      await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 45000 }).catch(()=>{});
+      await login(page, username, password);
+      academic = await fetchAcademic(page);
+      biometric = await fetchBiometric(page);
+      // don't close browser here — your initBrowser may manage reuse
+    }
 
-    // ✅ RELOAD ONLY — back to login page immediately
-    await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle0" });
+    // 3) Update Supabase:
+    const updatePayload = {
+      academic_data: academic ?? null,
+      biometric_data: biometric ?? null,
+      fetched_at: new Date().toISOString()
+    };
+
+    if (existing) {
+      // Update existing row — do NOT overwrite password
+      await supabase
+        .from("student_credentials")
+        .update(updatePayload)
+        .eq("Id", existing.Id);
+    } else {
+      // Insert new row — only include password if provided (and user wanted to save it)
+      const insertRow = {
+        username,
+        fetched_at: updatePayload.fetched_at,
+        academic_data: updatePayload.academic_data,
+        biometric_data: updatePayload.biometric_data
+      };
+      if (password) insertRow.password = password;
+      await supabase.from("student_credentials").insert([insertRow]);
+    }
+
+    // 4) Return live result
+    return res.json({
+      success: true,
+      source: "live",
+      academic,
+      biometric,
+      fetched_at: updatePayload.fetched_at
+    });
 
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error("[/get-attendance] error:", err);
+    return res.status(500).json({ success: false, message: err.message || "Internal error" });
   }
 });
+
 
 // --- Today's logins ---
 app.get("/today-logins", async (req, res) => {
