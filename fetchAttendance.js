@@ -23,7 +23,7 @@ async function initBrowser() {
 async function login(page, username, password) {
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
-
+console.log("type");
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
@@ -32,6 +32,7 @@ async function login(page, username, password) {
 
 // --- Fetch Academic Attendance ---
 async function fetchAcademic(page) {
+  console.log("acc");
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
 
