@@ -23,10 +23,10 @@ app.get("/run-cron", async (req, res) => {
   const start = Date.now();
 
   try {
-    // 1) fetch users
+    // 1) Fetch users
     const { data: users, error: fetchErr } = await supabase
       .from("student_credentials")
-      .select("Id,username, password");
+      .select("Id, username, password");
 
     if (fetchErr) throw fetchErr;
     if (!users || users.length === 0) {
@@ -34,83 +34,82 @@ app.get("/run-cron", async (req, res) => {
       return res.json({ success: true, message: "No students to process", processed: 0 });
     }
 
-    // helper
     const wait = ms => new Promise(r => setTimeout(r, ms));
-
-    // 2) init browser/page once (uses your existing initBrowser)
     const { browser, page } = await initBrowser();
 
     let processed = 0;
     let succeeded = 0;
     let skipped = 0;
 
-    // 3) process sequentially
+    console.log(`\n===== 🕒 Starting CRON for ${users.length} students =====\n`);
+
     for (const user of users) {
       processed++;
+      console.log(`🔄 Fetching ${user.username} ...`);
 
-      // skip if missing credentials
+      // skip if missing creds
       if (!user.username || !user.password) {
         skipped++;
+        console.log(`⚠️ Skipped ${user.username} — missing credentials`);
         await supabase
           .from("student_credentials")
           .update({ fetched_at: new Date().toISOString() })
-          .eq("Id", user.id)
-          .then(() => {}) // ignore errors updating fetched_at for missing creds
+          .eq("Id", user.Id)
           .catch(() => {});
-        // polite wait
         await wait(3000);
+        console.log(`----------------------------------`);
         continue;
       }
 
-      // try up to 2 attempts
       let ok = false;
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          // ensure we're at homepage / login page to start fresh
           try {
-            await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 45000 });
-          } catch (e) {
-            // continue; page.goto may fail sometimes; still try login
-          }
+            await page.goto("https://samvidha.iare.ac.in/", {
+              waitUntil: "networkidle2",
+              timeout: 45000,
+            });
+          } catch {}
 
-          // use your login/fetch functions (they operate on `page`)
           await login(page, user.username, user.password);
 
-          // fetch data
           const academic = await fetchAcademic(page);
           const biometric = await fetchBiometric(page);
 
-          // update supabase only on success
           await supabase
             .from("student_credentials")
             .update({
               academic_data: JSON.stringify(academic),
               biometric_data: JSON.stringify(biometric),
-              fetched_at: new Date().toISOString()
+              fetched_at: new Date().toISOString(),
             })
-            .eq("id", user.Id);
+            .eq("Id", user.Id);
 
+          console.log(`✅ Success — updated ${user.username}`);
           ok = true;
           succeeded++;
-          break; // success — exit retry loop
+          break;
         } catch (err) {
-          // on last attempt, we skip updating this user
           if (attempt === 2) {
+            console.log(`❌ Failed ${user.username} after 2 attempts — skipped`);
             skipped++;
-            // do NOT write error to DB (SKIP as requested)
           } else {
-            // small backoff before retry
+            console.log(`⚠️ Attempt ${attempt} failed for ${user.username}, retrying...`);
             await wait(3000);
           }
         }
-      } // end retry loop
+      }
 
-      // polite delay between users
+      console.log(`----------------------------------`);
       await wait(3000);
-    } // end users loop
+    }
+
+    await browser.close();
 
     const elapsedMs = Date.now() - start;
-    console.log(`[run-cron] Completed. processed=${processed}, succeeded=${succeeded}, skipped=${skipped}, time=${Math.round(elapsedMs/1000)}s`);
+    console.log(
+      `\n✅ Completed CRON. processed=${processed}, succeeded=${succeeded}, skipped=${skipped}, time=${Math.round(elapsedMs / 1000)}s`
+    );
 
     return res.json({
       success: true,
@@ -118,14 +117,14 @@ app.get("/run-cron", async (req, res) => {
       processed,
       succeeded,
       skipped,
-      time_seconds: Math.round(elapsedMs/1000)
+      time_seconds: Math.round(elapsedMs / 1000),
     });
-
   } catch (err) {
     console.error(`[run-cron] Fatal error:`, err.message || err);
     return res.status(500).json({ success: false, message: err.message || "Internal error" });
   }
 });
+
 
 
 
