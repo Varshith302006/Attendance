@@ -126,7 +126,3 @@ app.get("/today-logins", async (req, res) => {
 
 app.listen(process.env.PORT || 3000, () => {});
 
-
-
-
->>>>>>> c3318355dc39e6f26b82f133618b932ec35ec6d0
