@@ -11,7 +11,9 @@ async function launchBrowser() {
   const page = await browser.newPage();
 
   // PRELOAD SAMVIDHA BEFORE USERNAME/PASSWORD ENTRY
+   console.log("🌐 Loading Samvidha login page...");
   await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
+    console.log("✅ Samvidha login page loaded.");
 
   return { browser, page };
 }
@@ -21,9 +23,11 @@ async function launchBrowser() {
 async function login(page, username, password) {
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
+    console.log("🔐 Submitting login form...");
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
+     console.log("✅ Login successful.");
   ]);
 }
 
@@ -31,7 +35,7 @@ async function login(page, username, password) {
 async function fetchAcademic(page) {
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
   await page.waitForSelector('table tbody tr', { timeout: 15000 });
-
+console.log("📘 Fetching Academic Attendance...");
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
       const cols = row.querySelectorAll('td');
@@ -93,4 +97,5 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
+
 
