@@ -9,12 +9,16 @@ async function launchBrowser() {
     args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
   });
   const page = await browser.newPage();
+
+  // PRELOAD SAMVIDHA BEFORE USERNAME/PASSWORD ENTRY
+  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
+
   return { browser, page };
 }
 
+
 // --- Login ---
 async function login(page, username, password) {
-  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
   await page.type('input[name="txt_uname"]', username, { delay: 0 });
   await page.type('input[name="txt_pwd"]', password, { delay: 0 });
   await Promise.all([
@@ -89,3 +93,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
+
