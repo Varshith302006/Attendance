@@ -14,23 +14,64 @@ const supabaseUrl = "https://ywsqpuvraddaimlbiuds.supabase.co";
 const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// ✅ Manually triggered attendance fetch route (NO CRON)
 app.get("/run-cron", async (req, res) => {
+  console.log("🕒 /run-cron triggered at:", new Date().toLocaleString());
+
   try {
-    console.log("Manual cron started at:", new Date().toLocaleString());
+    // 1) Fetch all students from Supabase
+    const { data: users, error: fetchErr } = await supabase
+      .from("student_credentials")
+      .select("*");
 
-    // Example — call your existing attendance fetch logic
-    await initBrowser();
-    await login("24951A05DF", "password"); // Later we will make it dynamic via DB
-    await fetchAcademic();
-    await fetchBiometric();
+    if (fetchErr) throw fetchErr;
+    if (!users || users.length === 0) {
+      console.log("No users found in student_credentials.");
+      return res.json({ success: false, message: "No students found" });
+    }
 
-    console.log("Manual cron completed.");
-    res.json({ success: true, message: "Attendance fetched successfully" });
-  } catch (error) {
-    console.error("Cron failed:", error);
-    res.status(500).json({ success: false, message: "Cron failed", error });
+    console.log(`📚 Found ${users.length} users.`);
+
+    // 2) Init browser ONCE
+    const { browser, page } = await initBrowser();
+
+    // 3) Process users one by one
+    for (const user of users) {
+      const nowISO = new Date().toISOString();
+      console.log(`🔄 Fetching attendance for ${user.username}...`);
+
+      try {
+        await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle0", timeout: 45000 });
+        await login(page, user.username, user.password);
+
+        const academic = await fetchAcademic(page);
+        const biometric = await fetchBiometric(page);
+
+        // 4) Update Supabase record
+        const { error: updateErr } = await supabase
+          .from("student_credentials")
+          .update({
+            academic_data: JSON.stringify(academic),
+            biometric_data: JSON.stringify(biometric),
+            fetched_at: nowISO
+          })
+          .eq("id", user.id);
+
+        console.log(updateErr ? `❌ Update failed for ${user.username}` : `✅ Updated ${user.username}`);
+      } catch (err) {
+        console.error(`Error for ${user.username}:`, err.message);
+      }
+    }
+
+    console.log("✅ Attendance fetch completed for all users.");
+    return res.json({ success: true, message: "Attendance fetched for all users" });
+
+  } catch (err) {
+    console.error("💥 Cron error:", err.message);
+    return res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body;
