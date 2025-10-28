@@ -1,29 +1,22 @@
-const puppeteer = require("puppeteer-core");
-const chromium = require("chromium");
+const puppeteer = require('puppeteer-core');
+const chromium = require('chromium');
 
-let browser = null;
-let page = null;
-
-// --- Launch Browser (only once, auto-reuse) ---
-async function initBrowser() {
-  if (browser && page) return { browser, page }; // reuse if already running
-
-  browser = await puppeteer.launch({
+// --- Launch Browser ---
+async function launchBrowser() {
+  const browser = await puppeteer.launch({
     headless: true,
     executablePath: chromium.path,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+    args: ["--no-sandbox","--disable-setuid-sandbox","--disable-dev-shm-usage"]
   });
-
-  page = await browser.newPage();
-  await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle0", timeout: 60000 });
+  const page = await browser.newPage();
   return { browser, page };
 }
 
 // --- Login ---
 async function login(page, username, password) {
-  await page.type('input[name="txt_uname"]', username, { delay: 0 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 0 });
-
+  await page.goto('https://samvidha.iare.ac.in/', { waitUntil: 'networkidle0', timeout: 60000 });
+  await page.type('input[name="txt_uname"]', username, { delay: 10 });
+  await page.type('input[name="txt_pwd"]', password, { delay: 10 });
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
@@ -69,7 +62,7 @@ async function fetchBiometric(page) {
     })
   );
 
-  const totalDays = rows.length - 1;
+  const totalDays = rows.length - 1; // exclude header
   const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
   const percentage = totalDays > 0 ? (presentCount / totalDays) * 100 : 0;
 
@@ -77,8 +70,8 @@ async function fetchBiometric(page) {
     totalDays,
     presentCount,
     percentage: Number(percentage.toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
+    classesCanBunk: classesCanBunk(presentCount, totalDays),         // number of leaves can take
+    classesToAttendFor75: classesToReachTarget(presentCount, totalDays) // days to attend to reach 75%
   };
 }
 
@@ -95,4 +88,4 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
   return x > 0 ? x : 0;
 }
 
-module.exports = { initBrowser, login, fetchAcademic, fetchBiometric };
+module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
