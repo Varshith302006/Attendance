@@ -77,13 +77,14 @@ app.get("/run-cron", async (req, res) => {
           const biometric = await fetchBiometric(page);
 
           await supabase
-            .from("student_credentials")
-            .update({
-              academic_data: JSON.stringify(academic),
-              biometric_data: JSON.stringify(biometric),
-              fetched_at: new Date().toISOString(),
-            })
-            .eq("Id", user.Id);
+          .from("student_credentials")
+          .update({
+            academic_data: academic,        // ← directly JSON
+            biometric_data: biometric,      // ← directly JSON
+            fetched_at: new Date().toISOString(),
+          })
+          .eq("Id", user.Id);
+
 
           console.log(`✅ Success — updated ${user.username}`);
           ok = true;
