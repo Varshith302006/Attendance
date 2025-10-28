@@ -54,7 +54,7 @@ app.get("/run-cron", async (req, res) => {
         await supabase
           .from("student_credentials")
           .update({ fetched_at: new Date().toISOString() })
-          .eq("id", user.id)
+          .eq("Id", user.id)
           .then(() => {}) // ignore errors updating fetched_at for missing creds
           .catch(() => {});
         // polite wait
