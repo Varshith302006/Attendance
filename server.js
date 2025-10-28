@@ -26,7 +26,7 @@ app.get("/run-cron", async (req, res) => {
     // 1) fetch users
     const { data: users, error: fetchErr } = await supabase
       .from("student_credentials")
-      .select("username, password");
+      .select("id,username, password");
 
     if (fetchErr) throw fetchErr;
     if (!users || users.length === 0) {
