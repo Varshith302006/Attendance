@@ -88,7 +88,7 @@ app.get("/run-cron", async (req, res) => {
               biometric_data: JSON.stringify(biometric),
               fetched_at: new Date().toISOString()
             })
-            .eq("id", user.id);
+            .eq("id", user.Id);
 
           ok = true;
           succeeded++;
