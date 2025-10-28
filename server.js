@@ -128,12 +128,15 @@ app.get("/run-cron", async (req, res) => {
 
 
 
-// POST /get-attendance (final)
 app.post("/get-attendance", async (req, res) => {
   const { username, password } = req.body || {};
 
+  // Set content type for streaming JSON lines
+  res.setHeader('Content-Type', 'application/json');
+
   if (!username || !password) {
-    return res.status(400).json({ error: "username and password required" });
+    res.write(JSON.stringify({ step: "error", data: { error: "username and password required" } }) + "\n");
+    return res.end();
   }
 
   try {
@@ -158,16 +161,13 @@ app.post("/get-attendance", async (req, res) => {
 
       // Return cache only if password matches AND data present AND fresh
       if (existing.password === password && hasAcademic && hasBiometric && isFresh) {
-        // Plain response keys as requested
-        return res.json({
-          academic_data: existing.academic_data,
-          biometric_data: existing.biometric_data
-        });
+        res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
+        res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
+        return res.end();
       }
     }
 
     // 3) Need to do live fetch (cache missing/expired or password mismatch or user doesn't exist)
-    // Attempt login+fetch. If login fails -> return 401 and DO NOT save anything for existing/non-existing user.
     let academic = null;
     let biometric = null;
     try {
@@ -183,11 +183,11 @@ app.post("/get-attendance", async (req, res) => {
       academic = await fetchAcademic(page);
       biometric = await fetchBiometric(page);
 
-      // Do not forcibly close browser if your initBrowser is designed for reuse.
+      // No need to forcibly close browser if your initBrowser is designed for reuse.
     } catch (liveErr) {
-      console.error("[/get-attendance] live fetch/login failed:", liveErr?.message || liveErr);
-      // Return 401 for invalid creds / blocked
-      return res.status(401).json({ error: "Invalid credentials or site blocked (login failed)" });
+      // If any step fails, respond as error immediately
+      res.write(JSON.stringify({ step: "error", data: { error: "Invalid credentials or site blocked (login failed)" } }) + "\n");
+      return res.end();
     }
 
     // 4) Persist results to Supabase (JSONB fields) - do not overwrite password for existing users
@@ -215,17 +215,17 @@ app.post("/get-attendance", async (req, res) => {
       await supabase.from("student_credentials").insert([insertRow]);
     }
 
-    // 5) Return fresh data to frontend (plain fields)
-    return res.json({
-      academic_data: academic,
-      biometric_data: biometric
-    });
+    // 5) Stream fresh data to frontend (each as its own JSON object)
+    res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
+    res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
+    res.end();
 
   } catch (err) {
-    console.error("[/get-attendance] fatal:", err);
-    return res.status(500).json({ error: err?.message || "Internal server error" });
+    res.write(JSON.stringify({ step: "error", data: { error: err?.message || "Internal server error" } }) + "\n");
+    res.end();
   }
 });
+
 
 
 // --- Today's logins ---
