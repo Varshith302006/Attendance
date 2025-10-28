@@ -27,8 +27,9 @@ async function login(page, username, password) {
   await Promise.all([
     page.click('#but_submit'),
     page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
-     console.log("✅ Login successful.");
   ]);
+       console.log("✅ Login successful.");
+
 }
 
 // --- Fetch Academic Attendance ---
@@ -97,5 +98,6 @@ function classesCanBunk(attended, total, targetPercentage = 75) {
 }
 
 module.exports = { launchBrowser, login, fetchAcademic, fetchBiometric };
+
 
 
