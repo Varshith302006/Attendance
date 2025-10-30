@@ -29,6 +29,56 @@ function logEvent(event, details = {}) {
   fs.appendFileSync(LOG_FILE, line + '\n');
 }
 // Silent safe /run-cron endpoint — ONE-BY-ONE queue, 3s delay, retry once, SKIP failures
+app.post("/bulk-attendance", async (req, res) => {
+  // Get array of usernames
+  const { usernames } = req.body || {};
+  if (!Array.isArray(usernames) || usernames.length === 0) {
+    return res.status(400).json({ success: false, message: "No usernames selected" });
+  }
+
+  let processed = 0, succeeded = 0, failed = [];
+  for (const username of usernames) {
+    // Fetch user's credentials from Supabase
+    const { data: user, error: fetchErr } = await supabase
+      .from("student_credentials")
+      .select("Id, username, password")
+      .eq("username", username)
+      .maybeSingle();
+    if (fetchErr || !user) {
+      failed.push({username, error: fetchErr?.message || "User not found"});
+      continue;
+    }
+    try {
+      // Launch a browser, fetch attendance, update user as in /get-attendance
+      const { browser, page } = await initBrowser();
+      await page.goto("https://samvidha.iare.ac.in/", {waitUntil:"networkidle2", timeout:45000});
+      await login(page, user.username, user.password);
+      const academic = await fetchAcademic(page);
+      const biometric = await fetchBiometric(page);
+      await supabase
+        .from("student_credentials")
+        .update({
+          academic_data: academic,
+          biometric_data: biometric,
+          fetched_at: new Date().toISOString()
+        })
+        .eq("Id", user.Id);
+      succeeded++;
+      processed++;
+      await browser.close();
+    } catch (err) {
+      failed.push({username, error: err.message});
+      processed++;
+    }
+  }
+  res.json({
+    success: true,
+    processed,
+    succeeded,
+    failed
+  });
+});
+
 app.get("/run-cron", async (req, res) => {
   const start = Date.now();
   initLogFile(); // Clear log for each run
