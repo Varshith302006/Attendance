@@ -44,9 +44,13 @@ app.post("/run-selected", async (req, res) => {
     const { data: users, error: fetchErr } = await supabase
       .from("student_credentials")
       .select("Id, username, password")
-      .in("username", usernames);
+      .in('username', usernames);
 
-    if (fetchErr) throw fetchErr;
+    if (fetchErr) {
+      logEvent('fetch-users-error', { error: fetchErr.message });
+      throw fetchErr;
+    }
+
     if (!users || users.length === 0) {
       logEvent('no-users');
       return res.json({ success: true, message: "No students to process", processed: 0 });
@@ -55,11 +59,15 @@ app.post("/run-selected", async (req, res) => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const { browser } = await initBrowser();
 
-    let processed = 0, succeeded = 0, skipped = 0;
+    let processed = 0;
+    let succeeded = 0;
+    let skipped = 0;
+
     logEvent('selected-cron-start', { user_count: users.length });
 
     for (const user of users) {
       processed++;
+      const page = await browser.newPage();
       logEvent('user-start', { username: user.username });
 
       if (!user.username || !user.password) {
@@ -72,15 +80,22 @@ app.post("/run-selected", async (req, res) => {
           .catch(() => {});
         await wait(3000);
         logEvent('user-end', { username: user.username, status: 'skipped' });
+        await page.close();
         continue;
       }
 
       let ok = false;
-      const page = await browser.newPage();
-
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 45000 });
+          try {
+            await page.goto("https://samvidha.iare.ac.in/", {
+              waitUntil: "networkidle2",
+              timeout: 45000,
+            });
+          } catch (gotoErr) {
+            logEvent('goto-error', { username: user.username, attempt });
+          }
+
           await login(page, user.username, user.password);
 
           const academic = await fetchAcademic(page);
@@ -115,14 +130,25 @@ app.post("/run-selected", async (req, res) => {
       await wait(3000);
     }
 
-    await browser.close();
     const elapsedMs = Date.now() - start;
-    logEvent('selected-cron-complete', { processed, succeeded, skipped, time_seconds: Math.round(elapsedMs / 1000) });
+    logEvent('selected-cron-complete', {
+      processed,
+      succeeded,
+      skipped,
+      time_seconds: Math.round(elapsedMs / 1000),
+    });
 
-    res.json({ success: true, message: "Completed", processed, succeeded, skipped, time_seconds: Math.round(elapsedMs / 1000) });
+    return res.json({
+      success: true,
+      message: "Completed",
+      processed,
+      succeeded,
+      skipped,
+      time_seconds: Math.round(elapsedMs / 1000),
+    });
   } catch (err) {
     logEvent('selected-cron-fatal', { error: err.message });
-    res.status(500).json({ success: false, message: err.message || "Internal error" });
+    return res.status(500).json({ success: false, message: err.message || "Internal error" });
   }
 });
 
