@@ -28,6 +28,131 @@ function logEvent(event, details = {}) {
   console.log(line);
   fs.appendFileSync(LOG_FILE, line + '\n');
 }
+
+
+app.post("/run-selected", async (req, res) => {
+  const { usernames } = req.body;
+
+  if (!Array.isArray(usernames) || usernames.length === 0) {
+    return res.status(400).json({ success: false, message: "Usernames must be a non-empty array" });
+  }
+
+  const start = Date.now();
+  initLogFile(); // Clear log for each run
+
+  try {
+    // Fetch only selected users from Supabase
+    const { data: users, error: fetchErr } = await supabase
+      .from("student_credentials")
+      .select("Id, username, password")
+      .in('username', usernames);
+
+    if (fetchErr) {
+      logEvent('fetch-users-error', { error: fetchErr.message });
+      throw fetchErr;
+    }
+
+    if (!users || users.length === 0) {
+      logEvent('no-users');
+      return res.json({ success: true, message: "No students to process", processed: 0 });
+    }
+
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const { browser, page } = await initBrowser();
+
+    let processed = 0;
+    let succeeded = 0;
+    let skipped = 0;
+
+    logEvent('selected-cron-start', { user_count: users.length });
+
+    for (const user of users) {
+      processed++;
+      logEvent('user-start', { username: user.username });
+
+      if (!user.username || !user.password) {
+        skipped++;
+        logEvent('user-skipped', { username: user.username, reason: 'missing credentials' });
+        await supabase
+          .from("student_credentials")
+          .update({ fetched_at: new Date().toISOString() })
+          .eq("Id", user.Id)
+          .catch(() => {});
+        await wait(3000);
+        logEvent('user-end', { username: user.username, status: 'skipped' });
+        continue;
+      }
+
+      let ok = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          try {
+            await page.goto("https://samvidha.iare.ac.in/", {
+              waitUntil: "networkidle2",
+              timeout: 45000,
+            });
+          } catch (gotoErr) {
+            logEvent('goto-error', { username: user.username, attempt });
+          }
+
+          await login(page, user.username, user.password);
+
+          const academic = await fetchAcademic(page);
+          const biometric = await fetchBiometric(page);
+
+          await supabase
+            .from("student_credentials")
+            .update({
+              academic_data: academic,
+              biometric_data: biometric,
+              fetched_at: new Date().toISOString(),
+            })
+            .eq("Id", user.Id);
+
+          logEvent('user-success', { username: user.username });
+          ok = true;
+          succeeded++;
+          break;
+        } catch (err) {
+          if (attempt === 2) {
+            logEvent('user-failed', { username: user.username, attempt, error: err.message });
+            skipped++;
+          } else {
+            logEvent('user-retry', { username: user.username, attempt, error: err.message });
+            await wait(3000);
+          }
+        }
+      }
+
+      logEvent('user-end', { username: user.username, status: ok ? 'success' : 'failed' });
+      await wait(3000);
+    }
+
+    await browser.close();
+
+    const elapsedMs = Date.now() - start;
+    logEvent('selected-cron-complete', {
+      processed,
+      succeeded,
+      skipped,
+      time_seconds: Math.round(elapsedMs / 1000),
+    });
+
+    return res.json({
+      success: true,
+      message: "Completed",
+      processed,
+      succeeded,
+      skipped,
+      time_seconds: Math.round(elapsedMs / 1000),
+    });
+  } catch (err) {
+    logEvent('selected-cron-fatal', { error: err.message });
+    return res.status(500).json({ success: false, message: err.message || "Internal error" });
+  }
+});
+
+
 app.get("/run-cron", async (req, res) => {
   const start = Date.now();
   initLogFile(); // Clear log for each run
