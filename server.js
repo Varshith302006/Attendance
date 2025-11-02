@@ -38,32 +38,24 @@ app.post("/run-selected", async (req, res) => {
   }
 
   const start = Date.now();
-  initLogFile(); // Clear log for each run
+  initLogFile();
 
   try {
-    // Fetch only selected users from Supabase
     const { data: users, error: fetchErr } = await supabase
       .from("student_credentials")
       .select("Id, username, password")
-      .in('username', usernames);
+      .in("username", usernames);
 
-    if (fetchErr) {
-      logEvent('fetch-users-error', { error: fetchErr.message });
-      throw fetchErr;
-    }
-
+    if (fetchErr) throw fetchErr;
     if (!users || users.length === 0) {
       logEvent('no-users');
       return res.json({ success: true, message: "No students to process", processed: 0 });
     }
 
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const { browser, page } = await initBrowser();
+    const { browser } = await initBrowser();
 
-    let processed = 0;
-    let succeeded = 0;
-    let skipped = 0;
-
+    let processed = 0, succeeded = 0, skipped = 0;
     logEvent('selected-cron-start', { user_count: users.length });
 
     for (const user of users) {
@@ -84,17 +76,11 @@ app.post("/run-selected", async (req, res) => {
       }
 
       let ok = false;
+      const page = await browser.newPage();
+
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
-          try {
-            await page.goto("https://samvidha.iare.ac.in/", {
-              waitUntil: "networkidle2",
-              timeout: 45000,
-            });
-          } catch (gotoErr) {
-            logEvent('goto-error', { username: user.username, attempt });
-          }
-
+          await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 45000 });
           await login(page, user.username, user.password);
 
           const academic = await fetchAcademic(page);
@@ -124,34 +110,21 @@ app.post("/run-selected", async (req, res) => {
         }
       }
 
+      await page.close();
       logEvent('user-end', { username: user.username, status: ok ? 'success' : 'failed' });
       await wait(3000);
     }
 
     await browser.close();
-
     const elapsedMs = Date.now() - start;
-    logEvent('selected-cron-complete', {
-      processed,
-      succeeded,
-      skipped,
-      time_seconds: Math.round(elapsedMs / 1000),
-    });
+    logEvent('selected-cron-complete', { processed, succeeded, skipped, time_seconds: Math.round(elapsedMs / 1000) });
 
-    return res.json({
-      success: true,
-      message: "Completed",
-      processed,
-      succeeded,
-      skipped,
-      time_seconds: Math.round(elapsedMs / 1000),
-    });
+    res.json({ success: true, message: "Completed", processed, succeeded, skipped, time_seconds: Math.round(elapsedMs / 1000) });
   } catch (err) {
     logEvent('selected-cron-fatal', { error: err.message });
-    return res.status(500).json({ success: false, message: err.message || "Internal error" });
+    res.status(500).json({ success: false, message: err.message || "Internal error" });
   }
 });
-
 
 app.get("/run-cron", async (req, res) => {
   const start = Date.now();
