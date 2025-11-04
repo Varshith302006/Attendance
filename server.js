@@ -6,10 +6,19 @@ const { initBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAt
 const fs = require('fs');
 const app = express();
 app.use(cors({
-  origin: "https://attendancedashboar.vercel.app", // your frontend
+  origin: [
+    "https://attendancedashboar.vercel.app", // your production frontend
+    "http://localhost:3000"                  // for local testing
+  ],
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true, // 👈 important if you ever send cookies or tokens
 }));
+
+// ✅ Handle preflight requests (Render requires this!)
+app.options("*", cors());
+
+// ✅ Body parsers
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
