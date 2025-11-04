@@ -15,7 +15,7 @@ async function initBrowser() {
   });
 
   page = await browser.newPage();
-  await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle0", timeout: 60000 });
+  await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 60000 });
   return { browser, page };
 }
 
@@ -26,7 +26,7 @@ async function login(page, username, password) {
 console.log("type");
   await Promise.all([
     page.click('#but_submit'),
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 })
+    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 })
   ]);
 }
 
@@ -34,7 +34,7 @@ console.log("type");
 async function fetchAcademic(page) {
   console.log("acc");
   await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
+  await page.waitForSelector('table tbody tr', { timeout: 30000 });
 
   const academicAttendance = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
@@ -61,7 +61,7 @@ async function fetchAcademic(page) {
 // --- Fetch Biometric Attendance ---
 async function fetchBiometric(page) {
   await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
-  await page.waitForSelector('table tbody tr', { timeout: 15000 });
+  await page.waitForSelector('table tbody tr', { timeout: 30000 });
 
   const rows = await page.$$eval('table tbody tr', rows =>
     rows.map(row => {
