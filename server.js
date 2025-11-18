@@ -27,7 +27,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Supabase setup
 const supabase = createClient(
   "https://ywsqpuvraddaimlbiuds.supabase.co",
-  "YOUR_SUPABASE_ANON_KEY"
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3c3FwdXZyYWRkYWltbGJpdWRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4MjMzMDgsImV4cCI6MjA3NjM5OTMwOH0.UqkzzWM7nRvgtNdvRy63LLN-UGv-zeYYx6tRYD5zxdY"
 );
 
 // Logging
