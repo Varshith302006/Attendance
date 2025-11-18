@@ -6,7 +6,7 @@ const cheerio = require("cheerio");
 // ============================================
 // URLs
 // ============================================
-const LOGIN_URL = "https://samvidha.iare.ac.in/login";
+const LOGIN_URL = "https://samvidha.iare.ac.in/pages/login/checkUser.php";
 const ACADEMIC_URL = "https://samvidha.iare.ac.in/home?action=stud_att_STD";
 const BIOMETRIC_URL = "https://samvidha.iare.ac.in/home?action=std_bio";
 
@@ -19,15 +19,19 @@ async function scrapeLogin(username, password) {
     password,
   });
 
-  const res = await axios.post(LOGIN_URL, body, {
-    withCredentials: true,
-    maxRedirects: 0,
-    validateStatus: (s) => s < 500, // allow redirects
-  });
+  const res = await axios.post(
+    "https://samvidha.iare.ac.in/pages/login/checkUser.php",
+    body,
+    {
+      withCredentials: true,
+      maxRedirects: 0,
+      validateStatus: (s) => s < 500,
+    }
+  );
 
   const cookies = res.headers["set-cookie"];
   if (!cookies || cookies.length === 0) {
-    throw new Error("Invalid credentials or blocked by Samvidha");
+    throw new Error("Invalid Credentials");
   }
 
   return cookies;
