@@ -124,8 +124,13 @@ app.post("/run-selected", async (req, res) => {
         const cookies = await login(null, user.username, user.password);
 
         // FETCH ACADEMIC + BIOMETRIC
-        const academic = await fetchAcademic(cookies);
-        const biometric = await fetchBiometric(cookies);
+        // const academic = await fetchAcademic(cookies);
+        // const biometric = await fetchBiometric(cookies);
+        const [academic, biometric] = await Promise.all([
+          fetchAcademic(cookies),
+          fetchBiometric(cookies)
+        ]);
+
 
         // SAVE TO DB
         await supabase
