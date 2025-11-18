@@ -1,100 +1,152 @@
-const puppeteer = require("puppeteer-core");
-const chromium = require("chromium");
+// fetchAttendance.js — FINAL VERSION FOR REAL SAMVIDHA URLs (NO PUPPETEER)
 
-let browser = null;
-let page = null;
+const axios = require("axios");
+const cheerio = require("cheerio");
 
-// --- Launch Browser (only once, auto-reuse) ---
-async function initBrowser() {
-  if (browser && page) return { browser, page }; // reuse if already running
+// ============================================
+// URLs
+// ============================================
+const LOGIN_URL = "https://samvidha.iare.ac.in/login";
+const ACADEMIC_URL = "https://samvidha.iare.ac.in/home?action=stud_att_STD";
+const BIOMETRIC_URL = "https://samvidha.iare.ac.in/home?action=std_bio";
 
-  browser = await puppeteer.launch({
-    headless: true,
-    executablePath: chromium.path,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+// ============================================
+// 1. LOGIN AND GET SESSION COOKIES
+// ============================================
+async function scrapeLogin(username, password) {
+  const body = new URLSearchParams({
+    username,
+    password,
   });
 
-  page = await browser.newPage();
-  await page.goto("https://samvidha.iare.ac.in/", { waitUntil: "networkidle2", timeout: 60000 });
-  return { browser, page };
+  const res = await axios.post(LOGIN_URL, body, {
+    withCredentials: true,
+    maxRedirects: 0,
+    validateStatus: (s) => s < 500, // allow redirects
+  });
+
+  const cookies = res.headers["set-cookie"];
+  if (!cookies || cookies.length === 0) {
+    throw new Error("Invalid credentials or blocked by Samvidha");
+  }
+
+  return cookies;
 }
 
-// --- Login ---
+// ============================================
+// 2. FETCH ACADEMIC PAGE HTML
+// ============================================
+async function fetchAcademicHTML(cookies) {
+  const res = await axios.get(ACADEMIC_URL, {
+    headers: {
+      Cookie: cookies.join("; "),
+    },
+  });
+
+  return res.data;
+}
+
+// ============================================
+// 3. FETCH BIOMETRIC PAGE HTML
+// ============================================
+async function fetchBiometricHTML(cookies) {
+  const res = await axios.get(BIOMETRIC_URL, {
+    headers: {
+      Cookie: cookies.join("; "),
+    },
+  });
+
+  return res.data;
+}
+
+// ============================================
+// 4. PARSE ACADEMIC HTML (Based on your HTML)
+// ============================================
+function parseAcademic(html) {
+  const $ = cheerio.load(html);
+  const rows = [];
+
+  $("table tbody tr").each((i, row) => {
+    const td = $(row).find("td");
+    if (td.length < 9) return;
+
+    rows.push({
+      sno: td.eq(0).text().trim(),
+      courseCode: td.eq(1).text().trim(),
+      courseName: td.eq(2).text().trim(),
+      courseType: td.eq(3).text().trim(),
+      courseCategory: td.eq(4).text().trim(),
+      conducted: Number(td.eq(5).text().trim()),
+      attended: Number(td.eq(6).text().trim()),
+      percentage: Number(td.eq(7).text().trim()),
+      status: td.eq(8).text().trim(),
+    });
+  });
+
+  return rows;
+}
+
+// ============================================
+// 5. PARSE BIOMETRIC HTML (Based on your HTML)
+// ============================================
+function parseBiometric(html) {
+  const $ = cheerio.load(html);
+  const rows = [];
+
+  $("table tbody tr").each((i, row) => {
+    const td = $(row).find("td");
+    if (td.length < 10) return;
+
+    rows.push({
+      sno: td.eq(0).text().trim(),
+      roll: td.eq(1).text().trim(),
+      name: td.eq(2).text().trim(),
+      date: td.eq(3).text().trim(),
+
+      iare_in: td.eq(4).text().trim(),
+      iare_out: td.eq(5).text().trim(),
+      iare_status: td.eq(6).text().trim(),
+
+      jntuh_in: td.eq(7).text().trim(),
+      jntuh_out: td.eq(8).text().trim(),
+      jntuh_status: td.eq(9).text().trim(),
+
+      classAttendance: td.eq(10)?.text()?.trim() || "",
+    });
+  });
+
+  return rows;
+}
+
+// ============================================
+// 6. EXPORT — match your server.js exactly
+// ============================================
+
+// server.js expects this to exist
+async function initBrowser() {
+  return { browser: null, page: null };
+}
+
+// server.js calls: login(page, username, password)
 async function login(page, username, password) {
-  await page.type('input[name="txt_uname"]', username, { delay: 0 });
-  await page.type('input[name="txt_pwd"]', password, { delay: 0 });
-console.log("type");
-  await Promise.all([
-    page.click('#but_submit'),
-    page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 })
-  ]);
+  return await scrapeLogin(username, password);
 }
 
-// --- Fetch Academic Attendance ---
-async function fetchAcademic(page) {
-  console.log("acc");
-  await page.evaluate(() => document.querySelector('a[href*="action=stud_att_STD"]').click());
-  await page.waitForSelector('table tbody tr', { timeout: 30000 });
-
-  const academicAttendance = await page.$$eval('table tbody tr', rows =>
-    rows.map(row => {
-      const cols = row.querySelectorAll('td');
-      if (cols.length >= 8) {
-        return {
-          courseCode: cols[1].innerText.trim(),
-          subject: cols[2].innerText.trim(),
-          total: parseInt(cols[5].innerText.trim()),
-          attended: parseInt(cols[6].innerText.trim()),
-          percentage: parseFloat(cols[7].innerText.trim())
-        };
-      }
-    }).filter(Boolean)
-  );
-
-  return academicAttendance.map(sub => ({
-    ...sub,
-    classesToAttendFor75: classesToReachTarget(sub.attended, sub.total),
-    classesCanBunk: classesCanBunk(sub.attended, sub.total)
-  }));
+// server.js calls: fetchAcademic(page)
+async function fetchAcademic(cookies) {
+  const html = await fetchAcademicHTML(cookies);
+  return parseAcademic(html);
 }
 
-// --- Fetch Biometric Attendance ---
-async function fetchBiometric(page) {
-  await page.goto('https://samvidha.iare.ac.in/home?action=std_bio', { waitUntil: 'networkidle2', timeout: 30000 });
-  await page.waitForSelector('table tbody tr', { timeout: 30000 });
-
-  const rows = await page.$$eval('table tbody tr', rows =>
-    rows.map(row => {
-      const cols = row.querySelectorAll('td');
-      return Array.from(cols).map(td => td.innerText.trim());
-    })
-  );
-
-  const totalDays = rows.length - 1;
-  const presentCount = rows.filter(row => row.some(td => td.toLowerCase() === 'present')).length;
-  const percentage = totalDays > 0 ? (presentCount / totalDays) * 100 : 0;
-
-  return {
-    totalDays,
-    presentCount,
-    percentage: Number(percentage.toFixed(2)),
-    classesCanBunk: classesCanBunk(presentCount, totalDays),
-    classesToAttendFor75: classesToReachTarget(presentCount, totalDays)
-  };
+// server.js calls: fetchBiometric(page)
+async function fetchBiometric(cookies) {
+  const html = await fetchBiometricHTML(cookies);
+  return parseBiometric(html);
 }
 
-// --- Helpers ---
-function classesToReachTarget(attended, total, targetPercentage = 75) {
-  const targetDecimal = targetPercentage / 100;
-  const x = Math.ceil((targetDecimal * total - attended) / (1 - targetDecimal));
-  return x > 0 ? x : 0;
-}
-
-function classesCanBunk(attended, total, targetPercentage = 75) {
-  const targetDecimal = targetPercentage / 100;
-  const x = Math.floor(attended / targetDecimal - total);
-  return x > 0 ? x : 0;
-}
-
-module.exports = { initBrowser, login, fetchAcademic, fetchBiometric };
-
+module.exports = {
+  initBrowser,
+  login,
+  fetchAcademic,
+  fetchBiometric,
+};
