@@ -13,40 +13,43 @@ const BIOMETRIC_URL = "https://samvidha.iare.ac.in/home?action=std_bio";
    1. REAL LOGIN (2-step like browser)
    ============================================================ */
 async function scrapeLogin(username, password) {
-  // STEP 1 → Get login page (get PHPSESSID + initial cookies)
-  const loginPage = await axios.get(LOGIN_PAGE, {
-    withCredentials: true,
-    validateStatus: () => true,
-  });
-
-  const initialCookies = loginPage.headers["set-cookie"] || [];
-
-  // STEP 2 → Submit login form inside this same session
-  const body = new URLSearchParams({
+  // 1) First: check credentials (browser does this)
+  const checkBody = new URLSearchParams({
     username,
-    password,
+    password
   });
 
-  const loginRes = await axios.post(LOGIN_POST, body, {
-    headers: {
-      Cookie: initialCookies.join("; "),
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    withCredentials: true,
-    maxRedirects: 0,
-    validateStatus: () => true,
-  });
+  const checkRes = await axios.post(
+    "https://samvidha.iare.ac.in/pages/login/checkUser.php",
+    checkBody,
+    {
+      withCredentials: true,
+      validateStatus: () => true
+    }
+  );
 
-  const loginCookies = loginRes.headers["set-cookie"] || [];
-
-  // Merge initial + login cookies
-  const finalCookies = [...initialCookies, ...loginCookies];
-
-  if (finalCookies.length === 0) {
-    throw new Error("Login failed — no session cookies");
+  // If Samvidha returns {success:false}
+  if (!checkRes.data || checkRes.data.success === false) {
+    throw new Error("Invalid Credentials");
   }
 
-  return finalCookies;
+  // 2) Extract cookies from this request
+  let cookies = checkRes.headers["set-cookie"] || [];
+
+  // 3) Now GET the dashboard (this actually creates session)
+  const dashboard = await axios.get(
+    "https://samvidha.iare.ac.in/home",
+    {
+      headers: { Cookie: cookies.join("; ") },
+      withCredentials: true,
+      validateStatus: () => true
+    }
+  );
+
+  const newCookies = dashboard.headers["set-cookie"] || [];
+  cookies = [...cookies, ...newCookies];
+
+  return cookies;
 }
 
 /* ============================================================
