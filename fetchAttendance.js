@@ -1,4 +1,4 @@
-// fetchAttendance.js — FINAL VERSION FOR REAL SAMVIDHA URLs (NO PUPPETEER)
+// fetchAttendance.js — FINAL FIXED VERSION FOR SAMVIDHA ✔✔
 
 const axios = require("axios");
 const cheerio = require("cheerio");
@@ -16,18 +16,14 @@ const BIOMETRIC_URL = "https://samvidha.iare.ac.in/home?action=std_bio";
 async function scrapeLogin(username, password) {
   const body = new URLSearchParams({
     username,
-    password,
+    password
   });
 
-  const res = await axios.post(
-    "https://samvidha.iare.ac.in/pages/login/checkUser.php",
-    body,
-    {
-      withCredentials: true,
-      maxRedirects: 0,
-      validateStatus: (s) => s < 500,
-    }
-  );
+  const res = await axios.post(LOG_URL, body, {
+    withCredentials: true,
+    maxRedirects: 0,
+    validateStatus: (s) => s < 500
+  });
 
   const cookies = res.headers["set-cookie"];
   if (!cookies || cookies.length === 0) {
@@ -42,11 +38,8 @@ async function scrapeLogin(username, password) {
 // ============================================
 async function fetchAcademicHTML(cookies) {
   const res = await axios.get(ACADEMIC_URL, {
-    headers: {
-      Cookie: cookies.join("; "),
-    },
+    headers: { Cookie: cookies.join("; ") }
   });
-
   return res.data;
 }
 
@@ -55,16 +48,13 @@ async function fetchAcademicHTML(cookies) {
 // ============================================
 async function fetchBiometricHTML(cookies) {
   const res = await axios.get(BIOMETRIC_URL, {
-    headers: {
-      Cookie: cookies.join("; "),
-    },
+    headers: { Cookie: cookies.join("; ") }
   });
-
   return res.data;
 }
 
 // ============================================
-// 4. PARSE ACADEMIC HTML (Based on your HTML)
+// 4. PARSE ACADEMIC HTML (Final correct)
 // ============================================
 function parseAcademic(html) {
   const $ = cheerio.load(html);
@@ -72,18 +62,35 @@ function parseAcademic(html) {
 
   $("table tbody tr").each((i, row) => {
     const td = $(row).find("td");
-    if (td.length < 9) return;
+    if (td.length < 9) return; // skip empty rows
+
+    const conducted = Number(td.eq(5).text().trim());
+    const attended = Number(td.eq(6).text().trim());
+    const percentage = Number(td.eq(7).text().trim());
+
+    // Calculate additional values (needed by your frontend)
+    const classesToAttendFor75 =
+      conducted >= attended
+        ? Math.max(0, Math.ceil((0.75 * conducted - attended) / (1 - 0.75)))
+        : 0;
+
+    const classesCanBunk =
+      percentage >= 75
+        ? Math.floor(attended - 0.75 * conducted)
+        : 0;
 
     rows.push({
       sno: td.eq(0).text().trim(),
       courseCode: td.eq(1).text().trim(),
-      courseName: td.eq(2).text().trim(),
+      subject: td.eq(2).text().trim(),
       courseType: td.eq(3).text().trim(),
       courseCategory: td.eq(4).text().trim(),
-      conducted: Number(td.eq(5).text().trim()),
-      attended: Number(td.eq(6).text().trim()),
-      percentage: Number(td.eq(7).text().trim()),
+      total: conducted,            // FRONTEND expects "total"
+      attended: attended,
+      percentage: percentage,
       status: td.eq(8).text().trim(),
+      classesToAttendFor75,
+      classesCanBunk
     });
   });
 
@@ -91,62 +98,70 @@ function parseAcademic(html) {
 }
 
 // ============================================
-// 5. PARSE BIOMETRIC HTML (Based on your HTML)
+// 5. PARSE BIOMETRIC HTML (Final correct)
 // ============================================
 function parseBiometric(html) {
   const $ = cheerio.load(html);
-  const rows = [];
 
   let totalDays = 0;
   let presentCount = 0;
+
+  const logs = [];
 
   $("table tbody tr").each((i, row) => {
     const td = $(row).find("td");
     if (td.length < 10) return;
 
+    const record = {
+      sno: td.eq(0).text().trim(),
+      roll: td.eq(1).text().trim(),
+      name: td.eq(2).text().trim(),
+      date: td.eq(3).text().trim(),
+      iare_in: td.eq(4).text().trim(),
+      iare_out: td.eq(5).text().trim(),
+      iare_status: td.eq(6).text().trim(),
+      jntuh_in: td.eq(7).text().trim(),
+      jntuh_out: td.eq(8).text().trim(),
+      jntuh_status: td.eq(9).text().trim()
+    };
+
+    logs.push(record);
     totalDays++;
 
-    const iareStatus = td.eq(6).text().trim().toLowerCase();
-    const jntuhStatus = td.eq(9).text().trim().toLowerCase();
+    // determine present
+    const present =
+      record.iare_status.toLowerCase().includes("present") ||
+      record.jntuh_status.toLowerCase().includes("present");
 
-    const isPresent =
-      iareStatus.includes("present") ||
-      jntuhStatus.includes("present");
-
-    if (isPresent) presentCount++;
+    if (present) presentCount++;
   });
 
-  const percentage = totalDays ? (presentCount / totalDays) * 100 : 0;
+  const percentage = totalDays === 0 ? 0 : ((presentCount / totalDays) * 100);
 
   return {
     totalDays,
     presentCount,
-    percentage: Number(percentage.toFixed(2))
+    percentage: Number(percentage.toFixed(2)),
+    data: logs
   };
 }
 
-
 // ============================================
-// 6. EXPORT — match your server.js exactly
+// 6. EXPORT for server.js
 // ============================================
-
-// server.js expects this to exist
 async function initBrowser() {
   return { browser: null, page: null };
 }
 
-// server.js calls: login(page, username, password)
 async function login(page, username, password) {
   return await scrapeLogin(username, password);
 }
 
-// server.js calls: fetchAcademic(page)
 async function fetchAcademic(cookies) {
   const html = await fetchAcademicHTML(cookies);
   return parseAcademic(html);
 }
 
-// server.js calls: fetchBiometric(page)
 async function fetchBiometric(cookies) {
   const html = await fetchBiometricHTML(cookies);
   return parseBiometric(html);
@@ -156,5 +171,5 @@ module.exports = {
   initBrowser,
   login,
   fetchAcademic,
-  fetchBiometric,
+  fetchBiometric
 };
