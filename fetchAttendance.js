@@ -82,16 +82,37 @@ function parseAcademic(html) {
     const td = $(row).find("td");
     if (td.length < 9) return;
 
+    const conducted = Number(td.eq(5).text().trim());
+    const attended = Number(td.eq(6).text().trim());
+    const percentage = Number(td.eq(7).text().trim());
+
+    // Calculate required fields
+    const target = 75;
+
+    // Classes required to reach 75%
+    let classesToAttend = 0;
+    if (percentage < target) {
+      classesToAttend = Math.ceil((0.75 * conducted - attended) / (1 - 0.75));
+    }
+
+    // Classes can bunk
+    let classesCanBunk = 0;
+    if (percentage > target) {
+      classesCanBunk = Math.floor((attended - 0.75 * conducted) / 0.75);
+    }
+
     rows.push({
       sno: td.eq(0).text().trim(),
       courseCode: td.eq(1).text().trim(),
-      courseName: td.eq(2).text().trim(),
+      subject: td.eq(2).text().trim(),
       courseType: td.eq(3).text().trim(),
       courseCategory: td.eq(4).text().trim(),
-      conducted: Number(td.eq(5).text().trim()),
-      attended: Number(td.eq(6).text().trim()),
-      percentage: Number(td.eq(7).text().trim()),
+      total: conducted,
+      attended: attended,
+      percentage: percentage,
       status: td.eq(8).text().trim(),
+      classesToAttendFor75: classesToAttend,
+      classesCanBunk: classesCanBunk
     });
   });
 
