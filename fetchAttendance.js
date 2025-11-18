@@ -97,30 +97,34 @@ function parseBiometric(html) {
   const $ = cheerio.load(html);
   const rows = [];
 
+  let totalDays = 0;
+  let presentCount = 0;
+
   $("table tbody tr").each((i, row) => {
     const td = $(row).find("td");
     if (td.length < 10) return;
 
-    rows.push({
-      sno: td.eq(0).text().trim(),
-      roll: td.eq(1).text().trim(),
-      name: td.eq(2).text().trim(),
-      date: td.eq(3).text().trim(),
+    totalDays++;
 
-      iare_in: td.eq(4).text().trim(),
-      iare_out: td.eq(5).text().trim(),
-      iare_status: td.eq(6).text().trim(),
+    const iareStatus = td.eq(6).text().trim().toLowerCase();
+    const jntuhStatus = td.eq(9).text().trim().toLowerCase();
 
-      jntuh_in: td.eq(7).text().trim(),
-      jntuh_out: td.eq(8).text().trim(),
-      jntuh_status: td.eq(9).text().trim(),
+    const isPresent =
+      iareStatus.includes("present") ||
+      jntuhStatus.includes("present");
 
-      classAttendance: td.eq(10)?.text()?.trim() || "",
-    });
+    if (isPresent) presentCount++;
   });
 
-  return rows;
+  const percentage = totalDays ? (presentCount / totalDays) * 100 : 0;
+
+  return {
+    totalDays,
+    presentCount,
+    percentage: Number(percentage.toFixed(2))
+  };
 }
+
 
 // ============================================
 // 6. EXPORT — match your server.js exactly
