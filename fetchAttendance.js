@@ -13,11 +13,8 @@ const BIOMETRIC_URL = "https://samvidha.iare.ac.in/home?action=std_bio";
    1. REAL LOGIN (2-step like browser)
    ============================================================ */
 async function scrapeLogin(username, password) {
-  // 1) First: check credentials (browser does this)
-  const checkBody = new URLSearchParams({
-    username,
-    password
-  });
+  // 1) Check credentials
+  const checkBody = new URLSearchParams({ username, password });
 
   const checkRes = await axios.post(
     "https://samvidha.iare.ac.in/pages/login/checkUser.php",
@@ -28,15 +25,22 @@ async function scrapeLogin(username, password) {
     }
   );
 
-  // If Samvidha returns {success:false}
-  if (!checkRes.data || checkRes.data.success === false) {
-    throw new Error("Invalid Credentials");
+  // FIXED VALIDATION
+  const isValid =
+    checkRes.data == 1 ||
+    checkRes.data == "1" ||
+    checkRes.data?.success === true;
+
+  if (!isValid) {
+    const err = new Error("Invalid Credentials");
+    err.code = "INVALID_LOGIN";
+    throw err;
   }
 
-  // 2) Extract cookies from this request
+  // 2) Extract cookies from response
   let cookies = checkRes.headers["set-cookie"] || [];
 
-  // 3) Now GET the dashboard (this actually creates session)
+  // 3) Load dashboard to initialize session
   const dashboard = await axios.get(
     "https://samvidha.iare.ac.in/home",
     {
@@ -51,6 +55,7 @@ async function scrapeLogin(username, password) {
 
   return cookies;
 }
+
 
 /* ============================================================
    2. GET HTML PAGES USING LOGIN COOKIES
