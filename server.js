@@ -1,3 +1,45 @@
+// =========================
+// QUEUE SYSTEM (OPTION B)
+// =========================
+
+const queue = [];
+let isProcessing = false;
+
+// delay for Samvidha between calls (IMPORTANT)
+const SAMVIDHA_DELAY = 800; // 800ms recommended (safe)
+
+// Helper: sleep/pause
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Add job to queue
+function addToQueue(task) {
+  queue.push(task);
+  processQueue();
+}
+
+// Process queue (one at a time)
+async function processQueue() {
+  if (isProcessing) return;
+  if (queue.length === 0) return;
+
+  isProcessing = true;
+  const task = queue.shift();
+
+  try {
+    await task(); // run job
+  } catch (err) {
+    console.error("Queue task error:", err);
+  }
+
+  await wait(SAMVIDHA_DELAY);
+  isProcessing = false;
+
+  // Continue next job
+  processQueue();
+}
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
@@ -168,7 +210,7 @@ app.get("/run-cron", async (req, res) => {
 // 🔥 3. FETCH SINGLE USER LIVE (MAIN API USED BY FRONTEND)
 // --------------------------------------------------------------
 app.post("/get-attendance", async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
 
   res.setHeader("Content-Type", "application/json");
 
@@ -177,79 +219,75 @@ app.post("/get-attendance", async (req, res) => {
     return res.end();
   }
 
-  try {
-    // FIND USER IN DB
-    const { data: existing, error } = await supabase
-      .from("student_credentials")
-      .select("*")
-      .eq("username", username)
-      .maybeSingle();
-
-    if (error) throw error;
-
-    const now = new Date();
-
-    // USE CACHE IF VALID
-    if (
-      existing &&
-      existing.password === password &&
-      existing.academic_data &&
-      existing.biometric_data &&
-      existing.fetched_at &&
-      now - new Date(existing.fetched_at) < 24 * 60 * 60 * 1000
-    ) {
-      res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
-      res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
-      return res.end();
-    }
-
-    // LIVE SCRAPE
-    let cookies;
+  // Put the job in queue
+  addToQueue(async () => {
     try {
-      cookies = await login(null, username, password);
-    } catch {
-      res.write(JSON.stringify({ step: "error", data: { error: "Invalid Credentials" } }) + "\n");
-      return res.end();
-    }
-
-    // FETCH FROM SCRAPER
-    const academic = await fetchAcademic(cookies);
-    const biometric = await fetchBiometric(cookies);
-
-    // UPDATE OR INSERT
-    if (existing) {
-      await supabase
+      // STEP 1: Check existing data
+      const { data: existing } = await supabase
         .from("student_credentials")
-        .update({
-          academic_data: academic,
-          biometric_data: biometric,
-          fetched_at: new Date().toISOString(),
-        })
-        .eq("Id", existing.Id);
-    } else {
-      await supabase
-        .from("student_credentials")
-        .insert([
+        .select("*")
+        .eq("username", username)
+        .maybeSingle();
+
+      const now = Date.now();
+
+      const isFresh =
+        existing &&
+        existing.password === password &&
+        existing.fetched_at &&
+        now - new Date(existing.fetched_at).getTime() < 24 * 60 * 60 * 1000;
+
+      if (isFresh) {
+        res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
+        res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
+        return res.end();
+      }
+
+      // STEP 2: LIVE SCRAPE (safe because queue handles it)
+      let cookies;
+      try {
+        cookies = await login(null, username, password);
+      } catch {
+        res.write(JSON.stringify({ step: "error", data: { error: "Invalid Credentials" } }) + "\n");
+        return res.end();
+      }
+
+      const academic = await fetchAcademic(cookies);
+      const biometric = await fetchBiometric(cookies);
+
+      // STEP 3: Write to DB
+      if (existing) {
+        await supabase
+          .from("student_credentials")
+          .update({
+            academic_data: academic,
+            biometric_data: biometric,
+            fetched_at: new Date().toISOString()
+          })
+          .eq("Id", existing.Id);
+      } else {
+        await supabase.from("student_credentials").insert([
           {
             username,
             password,
             academic_data: academic,
             biometric_data: biometric,
-            fetched_at: new Date().toISOString(),
-          },
+            fetched_at: new Date().toISOString()
+          }
         ]);
+      }
+
+      // STEP 4: Respond to frontend
+      res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
+      res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
+      res.end();
+    } catch (err) {
+      res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
+      res.end();
     }
-
-    // SEND DATA
-    res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
-    res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
-    return res.end();
-
-  } catch (err) {
-    res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
-    return res.end();
-  }
+  });
 });
+
 
 // --------------------------------------------------------------
 // 🔥 4. TRACK VISITS
