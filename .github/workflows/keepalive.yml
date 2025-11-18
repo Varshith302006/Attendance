@@ -1,0 +1,17 @@
+name: Keep Render Awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (GitHub uses UTC time)
+
+  workflow_dispatch:        # allow manual run button in Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Render server
+        run: |
+          echo "Pinging Render..."
+          curl -m 30 https://attendance-4rm8.onrender.com/today-logins || echo "Ping failed"
