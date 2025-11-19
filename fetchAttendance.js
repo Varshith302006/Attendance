@@ -121,7 +121,7 @@ function parseAcademic(html) {
    ============================================================ */
 function parseBiometric(html) {
   const $ = cheerio.load(html);
-  let totalDays = 0;
+  let totalDays = -1;
   let presentCount = 0;
 
   $("table tbody tr").each((i, row) => {
