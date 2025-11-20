@@ -260,6 +260,20 @@ app.post("/get-attendance", async (req, res) => {
       const academic = await fetchAcademic(cookies);
       const biometric = await fetchBiometric(cookies);
 
+      // ❗ VALIDATE RETURNED DATA — do NOT save if invalid
+      const invalidData =
+        !academic || !Array.isArray(academic) || academic.length === 0 ||
+        !biometric || typeof biometric !== "object";
+      
+      if (invalidData) {
+        res.write(
+          JSON.stringify({
+            step: "error",
+            data: { error: "No attendance data found. Not saving to database." }
+          }) + "\n"
+        );
+        return res.end(); // ❗ STOP — do NOT save to DB
+      }
       // STEP 3: Write to DB
       if (existing) {
         await supabase
