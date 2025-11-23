@@ -224,6 +224,6 @@ module.exports = {
   initBrowser,
   login,
   fetchAcademic,
-  fetchBiometric,,
+  fetchBiometric,
   fetchLatestAttendance
 };
