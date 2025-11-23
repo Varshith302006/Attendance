@@ -154,27 +154,44 @@ function parseBiometric(html) {
    ============================================================ */
 function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
-  const results = [];
+
+  const periods = {
+    1: { subject: "NOT UPDATED", date: "-", period: 1, status: "NOT UPDATED" },
+    2: { subject: "NOT UPDATED", date: "-", period: 2, status: "NOT UPDATED" },
+    3: { subject: "NOT UPDATED", date: "-", period: 3, status: "NOT UPDATED" },
+    4: { subject: "NOT UPDATED", date: "-", period: 4, status: "NOT UPDATED" },
+    5: { subject: "NOT UPDATED", date: "-", period: 5, status: "NOT UPDATED" },
+    6: { subject: "NOT UPDATED", date: "-", period: 6, status: "NOT UPDATED" }
+  };
 
   const headers = $("th.bg-pink, th[class*='bg-pink']");
 
-  headers.each((i, el) => {
-    const subject = $(el).text().trim().split("-")[1]?.trim();
+  headers.each((_, el) => {
+    const headerText = $(el).text().trim();
+    const subject = headerText.split("-")[1]?.trim() || headerText;
+
     const nextRow = $(el).closest("tr").next("tr");
     const td = nextRow.find("td");
 
     if (td.length >= 5) {
-      results.push({
-        subject,
-        date: td.eq(1).text().trim(),
-        period: td.eq(2).text().trim(),
-        status: td.eq(4).text().trim()
-      });
+      const date = td.eq(1).text().trim();
+      const period = Number(td.eq(2).text().trim());
+      const status = td.eq(4).text().trim();
+
+      if (period >= 1 && period <= 6) {
+        periods[period] = {
+          subject,
+          date,
+          period,
+          status
+        };
+      }
     }
   });
 
-  return results;
+  return periods;
 }
+
 
 async function fetchLatestAttendanceHTML(cookies) {
   const res = await axios.get(
