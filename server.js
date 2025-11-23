@@ -259,6 +259,7 @@ app.post("/get-attendance", async (req, res) => {
 
       const academic = await fetchAcademic(cookies);
       const biometric = await fetchBiometric(cookies);
+      const latest = await fetchLatestAttendance(cookies);
 
       // ❗ VALIDATE RETURNED DATA — do NOT save if invalid
       const invalidData =
@@ -299,6 +300,7 @@ app.post("/get-attendance", async (req, res) => {
       // STEP 4: Respond to frontend
       res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
       res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
+      res.write(JSON.stringify({ step: "latest", data: latest }) + "\n");
       res.end();
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
