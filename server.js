@@ -60,8 +60,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.options("/get-attendance", cors());
-app.options("/get-latest", cors());
+app.options("*", cors());
+
 
 // Body parsers
 app.use(bodyParser.json());
@@ -250,10 +250,6 @@ app.post("/get-attendance", async (req, res) => {
       const academic = await fetchAcademic(cookies);
       const biometric = await fetchBiometric(cookies);
 
-      res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
-      res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
-      res.end();
-
       // 🔥 Save credentials AFTER response (background)
       if (existing) {
         supabase.from("student_credentials")
@@ -273,6 +269,9 @@ app.post("/get-attendance", async (req, res) => {
             fetched_at: new Date().toISOString()
           }]);
       }
+      res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
+      res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
+      res.end();
 
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message }}));
