@@ -44,7 +44,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const { initBrowser, login, fetchAcademic, fetchBiometric } = require("./fetchAttendance");
+const { initBrowser, login, fetchAcademic, fetchBiometric, fetchLatestAttendance} = require("./fetchAttendance");
 const fs = require('fs');
 
 const app = express();
