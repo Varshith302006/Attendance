@@ -313,7 +313,9 @@ app.post("/get-attendance", async (req, res) => {
     }
   });
 });
-app.post("/get-latest", async (req, res) => {
+app.options("/get-latest", cors());
+
+app.post("/get-latest", cors(), async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -328,6 +330,7 @@ app.post("/get-latest", async (req, res) => {
     return res.json({ success: false, error: err.message });
   }
 });
+
 
 
 
