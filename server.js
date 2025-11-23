@@ -275,33 +275,35 @@ app.post("/get-attendance", async (req, res) => {
         );
         return res.end(); 
       }
-      // STEP 3: Write to DB
+       // STEP 4: Respond IMMEDIATELY
+      res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
+      res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
+      res.end();
+      
+      // STEP 3: Save to DB in background
       if (existing) {
-        await supabase
-          .from("student_credentials")
+        supabase.from("student_credentials")
           .update({
             academic_data: academic,
             biometric_data: biometric,
             fetched_at: new Date().toISOString()
           })
-          .eq("Id", existing.Id);
+          .eq("Id", existing.Id)
+          .then(()=> console.log("DB updated"))
+          .catch(err => console.error("DB update error:", err));
       } else {
-        await supabase.from("student_credentials").insert([
-          {
+        supabase.from("student_credentials")
+          .insert([{
             username,
             password,
             academic_data: academic,
             biometric_data: biometric,
             fetched_at: new Date().toISOString()
-          }
-        ]);
+          }])
+          .then(()=> console.log("DB inserted"))
+          .catch(err => console.error("DB insert error:", err));
       }
 
-      // STEP 4: Respond to frontend
-      res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
-      res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
-      // res.write(JSON.stringify({ step: "latest", data: latest }) + "\n");
-      res.end();
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
       res.end();
