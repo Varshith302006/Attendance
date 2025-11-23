@@ -156,25 +156,20 @@ function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // match ALL possible bg-pink headers
-  const headers = $("th[class*='bg-pink']");
+  // find all subject headers
+  $("th.bg-pink").each((i, el) => {
+    const subjectFull = $(el).text().trim();
+    const subject = subjectFull.split("-")[1]?.trim() || subjectFull;
 
-  headers.each((i, el) => {
-    const headerText = $(el).text().trim();
-    const subject = headerText.split("-")[1]?.trim() || headerText;
-
-    // SAFELY find next table
-    const table = $(el).nextAll("table").first();
-    if (!table || table.length === 0) return;
-
-    const firstRow = table.find("tbody tr").first();
-    const td = firstRow.find("td");
+    // the FIRST attendance row is the NEXT <tr> after the <th>
+    const nextRow = $(el).closest("tr").next("tr");
+    const td = nextRow.find("td");
 
     if (td.length >= 5) {
       results.push({
         subject,
-        date: td.eq(0).text().trim(),
-        period: td.eq(1).text().trim(),
+        date: td.eq(1).text().trim(),
+        period: td.eq(2).text().trim(),
         status: td.eq(4).text().trim()
       });
     }
@@ -183,24 +178,9 @@ function parseLatestAttendance(html) {
   return results;
 }
 
-async function fetchLatestAttendanceHTML(cookies) {
-  const res = await axios.get(
-    "https://samvidha.iare.ac.in/home?action=course_content",
-    {
-      headers: { Cookie: cookies.join("; ") },
-      withCredentials: true,
-    }
-  );
-  return res.data;
-}
 
 async function fetchLatestAttendance(cookies) {
   const html = await fetchLatestAttendanceHTML(cookies);
-
-  console.log("\n===== DEBUG COURSE CONTENT HTML (FIRST 300) =====");
-  console.log(html.substring(0, 60000));
-  console.log("=================================================\n");
-
   return parseLatestAttendance(html);
 }
 
