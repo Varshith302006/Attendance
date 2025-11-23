@@ -149,6 +149,55 @@ function parseBiometric(html) {
     percentage: Number(percentage.toFixed(2)),
   };
 }
+/* ============================================================
+   PARSE LATEST ATTENDANCE (subject only from its own <th>)
+   ============================================================ */
+function parseLatestAttendance(html) {
+  const $ = cheerio.load(html);
+
+  // Find the pink header for THIS subject’s table
+  const header = $("th.bg-pink").first().text().trim();
+
+  // Example: "ACSD08 - Data Structures"
+  // Extract only subject name (right side of "-")
+  const subject = header.includes("-")
+    ? header.split("-")[1].trim()
+    : header;
+
+  // Find first (latest) row in table
+  let latest = null;
+
+  $("table tbody tr").each((i, row) => {
+    const td = $(row).find("td");
+    if (td.length < 5) return;
+
+    if (!latest) {
+      latest = {
+        subject,
+        date: td.eq(0).text().trim(),
+        period: td.eq(1).text().trim(),
+        status: td.eq(4).text().trim(),
+      };
+    }
+  });
+
+  return latest;
+}
+async function fetchLatestAttendanceHTML(cookies) {
+  const res = await axios.get(
+    "https://samvidha.iare.ac.in/home?action=course_content",
+    {
+      headers: { Cookie: cookies.join("; ") },
+      withCredentials: true,
+    }
+  );
+  return res.data;
+}
+
+async function fetchLatestAttendance(cookies) {
+  const html = await fetchLatestAttendanceHTML(cookies);
+  return parseLatestAttendance(html);
+}
 
 /* ============================================================
    5. EXPORT FOR server.js
@@ -175,5 +224,6 @@ module.exports = {
   initBrowser,
   login,
   fetchAcademic,
-  fetchBiometric,
+  fetchBiometric,,
+  fetchLatestAttendance
 };
