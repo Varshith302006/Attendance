@@ -259,7 +259,7 @@ app.post("/get-attendance", async (req, res) => {
 
       const academic = await fetchAcademic(cookies);
       const biometric = await fetchBiometric(cookies);
-      const latest = await fetchLatestAttendance(cookies);
+      // const latest = await fetchLatestAttendance(cookies);
 
       // ❗ VALIDATE RETURNED DATA — do NOT save if invalid
       const invalidData =
@@ -300,13 +300,34 @@ app.post("/get-attendance", async (req, res) => {
       // STEP 4: Respond to frontend
       res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
       res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
-      res.write(JSON.stringify({ step: "latest", data: latest }) + "\n");
+      // res.write(JSON.stringify({ step: "latest", data: latest }) + "\n");
       res.end();
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
       res.end();
     }
   });
+});
+app.post("/get-latest", async (req, res) => {
+  const { username, password } = req.body || {};
+
+  res.setHeader("Content-Type", "application/json");
+
+  if (!username || !password) {
+    return res.json({ success: false, error: "Missing credentials" });
+  }
+
+  try {
+    // Login
+    const cookies = await login(null, username, password);
+
+    // Fetch latest attendance
+    const latest = await fetchLatestAttendance(cookies);
+
+    return res.json({ success: true, latest });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
 });
 
 
