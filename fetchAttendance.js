@@ -155,42 +155,77 @@ function parseBiometric(html) {
 function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
 
+  // 6 periods fixed
   const periods = {
-    1: { subject: "NOT UPDATED", date: "-", period: 1, status: "NOT UPDATED" },
-    2: { subject: "NOT UPDATED", date: "-", period: 2, status: "NOT UPDATED" },
-    3: { subject: "NOT UPDATED", date: "-", period: 3, status: "NOT UPDATED" },
-    4: { subject: "NOT UPDATED", date: "-", period: 4, status: "NOT UPDATED" },
-    5: { subject: "NOT UPDATED", date: "-", period: 5, status: "NOT UPDATED" },
-    6: { subject: "NOT UPDATED", date: "-", period: 6, status: "NOT UPDATED" }
+    1: null, 2: null, 3: null,
+    4: null, 5: null, 6: null
   };
 
-  const headers = $("th.bg-pink, th[class*='bg-pink']");
+  const today = new Date().toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).replace(",", "");
 
-  headers.each((_, el) => {
-    const headerText = $(el).text().trim();
-    const subject = headerText.split("-")[1]?.trim() || headerText;
+  let currentSubject = "";
+  let rowCounter = 0;
 
-    const nextRow = $(el).closest("tr").next("tr");
-    const td = nextRow.find("td");
+  $("tr").each((i, row) => {
 
-    if (td.length >= 5) {
-      const date = td.eq(1).text().trim();
-      const period = Number(td.eq(2).text().trim());
-      const status = td.eq(4).text().trim();
+    // SUBJECT HEADER
+    const th = $(row).find("th.bg-pink, th[class*='bg-pink']");
+    if (th.length) {
+      const txt = th.text().trim();
+      currentSubject = txt.split("-")[1]?.trim() || txt;
+      rowCounter = 0; // reset for next subject
+      return;
+    }
 
-      if (period >= 1 && period <= 6) {
-        periods[period] = {
-          subject,
-          date,
-          period,
-          status
-        };
-      }
+    // DATA ROW
+    const td = $(row).find("td");
+    if (td.length < 5) return;
+
+    rowCounter++;
+    if (rowCounter > 3) return;  // ONLY first 3 rows
+
+    const date = td.eq(1).text().trim();
+    const period = Number(td.eq(2).text().trim());
+    const topic = td.eq(3).text().trim();
+    const status = td.eq(4).text().trim();
+
+    if (period < 1 || period > 6) return;
+
+    // INSERT only if today
+    if (date === today) {
+      periods[period] = {
+        period,
+        subject: currentSubject,
+        topic,
+        date,
+        status
+      };
     }
   });
 
-  return periods;
+  // Fill missing periods with NOT UPDATED
+  const output = [];
+  for (let p = 1; p <= 6; p++) {
+    if (!periods[p]) {
+      output.push({
+        period: p,
+        subject: "NOT UPDATED",
+        topic: "-",
+        date: "-",
+        status: "NOT UPDATED"
+      });
+    } else {
+      output.push(periods[p]);
+    }
+  }
+
+  return output;
 }
+
 
 
 async function fetchLatestAttendanceHTML(cookies) {
