@@ -154,35 +154,34 @@ function parseBiometric(html) {
    ============================================================ */
 function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
+  const results = [];
 
-  // Find the pink header for THIS subject’s table
-  const header = $("th.bg-pink").first().text().trim();
+  $("th.bg-pink").each((i, el) => {
+    const header = $(el).text().trim();
+    const subject = header.includes("-")
+      ? header.split("-")[1].trim()
+      : header;
 
-  // Example: "ACSD08 - Data Structures"
-  // Extract only subject name (right side of "-")
-  const subject = header.includes("-")
-    ? header.split("-")[1].trim()
-    : header;
+    // Table after this header
+    const table = $(el).next("table");
+    if (!table.length) return;
 
-  // Find first (latest) row in table
-  let latest = null;
+    const firstRow = table.find("tbody tr").first();
+    const td = firstRow.find("td");
 
-  $("table tbody tr").each((i, row) => {
-    const td = $(row).find("td");
-    if (td.length < 5) return;
-
-    if (!latest) {
-      latest = {
+    if (td.length >= 5) {
+      results.push({
         subject,
         date: td.eq(0).text().trim(),
         period: td.eq(1).text().trim(),
-        status: td.eq(4).text().trim(),
-      };
+        status: td.eq(4).text().trim()
+      });
     }
   });
 
-  return latest;
+  return results;
 }
+
 async function fetchLatestAttendanceHTML(cookies) {
   const res = await axios.get(
     "https://samvidha.iare.ac.in/home?action=course_content",
