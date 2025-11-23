@@ -296,7 +296,13 @@ app.post("/get-attendance", async (req, res) => {
           }
         ]);
       }
-
+      // Insert site visit
+      if(username!="24951A05DX"){
+        await supabase
+          .from("site_visits")
+          .insert([{ username, visited_at: new Date().toISOString() }]);
+      }
+     
       // STEP 4: Respond to frontend
       res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
       res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
