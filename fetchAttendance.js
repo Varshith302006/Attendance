@@ -156,19 +156,21 @@ function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // find all subject headers
-  $("th.bg-pink").each((i, el) => {
-    const subjectFull = $(el).text().trim();
-    const subject = subjectFull.split("-")[1]?.trim() || subjectFull;
+  // match bg-pink headers inside the table
+  const headers = $("th.bg-pink, th[class*='bg-pink']");
 
-    // the FIRST attendance row is the NEXT <tr> after the <th>
+  headers.each((i, el) => {
+    const headerText = $(el).text().trim();
+    const subject = headerText.split("-")[1]?.trim() || headerText;
+
+    // the attendance row is the NEXT <tr> after this header's <tr>
     const nextRow = $(el).closest("tr").next("tr");
     const td = nextRow.find("td");
 
     if (td.length >= 5) {
       results.push({
         subject,
-        date: td.eq(1).text().trim(),
+        date: td.eq(1).text().trim(),   // S.No is td[0], so date is td[1]
         period: td.eq(2).text().trim(),
         status: td.eq(4).text().trim()
       });
@@ -177,6 +179,7 @@ function parseLatestAttendance(html) {
 
   return results;
 }
+
 
 
 async function fetchLatestAttendance(cookies) {
