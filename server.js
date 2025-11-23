@@ -302,16 +302,14 @@ app.post("/get-attendance", async (req, res) => {
           }])
           .catch(() => {});
       }
-      if (username !== "24951A05DX") {
+      res.end();
+       if (username !== "24951A05DX") {
+        console.log("e");
         supabase
           .from("site_visits")
           .insert([{ username, visited_at: new Date().toISOString() }])
           .catch(() => {});
-      }
-
-       
-      res.end();
-         
+      }  
 
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
