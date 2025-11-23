@@ -198,7 +198,7 @@ async function fetchLatestAttendance(cookies) {
   const html = await fetchLatestAttendanceHTML(cookies);
 
   console.log("\n===== DEBUG COURSE CONTENT HTML (FIRST 300) =====");
-  console.log(html.substring(0, 300));
+  console.log(html.substring(0, 5000));
   console.log("=================================================\n");
 
   return parseLatestAttendance(html);
