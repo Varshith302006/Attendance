@@ -176,7 +176,6 @@ function parseLatestAttendance(html) {
   return results;
 }
 
-❗❗ ADD THIS — YOU DELETED IT
 async function fetchLatestAttendanceHTML(cookies) {
   const res = await axios.get(
     "https://samvidha.iare.ac.in/home?action=course_content",
