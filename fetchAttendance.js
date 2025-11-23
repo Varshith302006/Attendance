@@ -156,15 +156,16 @@ function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  $("th.bg-pink").each((i, el) => {
-    const header = $(el).text().trim();
-    const subject = header.includes("-")
-      ? header.split("-")[1].trim()
-      : header;
+  // match ALL possible bg-pink headers
+  const headers = $("th[class*='bg-pink']");
 
-    // Table after this header
-    const table = $(el).next("table");
-    if (!table.length) return;
+  headers.each((i, el) => {
+    const headerText = $(el).text().trim();
+    const subject = headerText.split("-")[1]?.trim() || headerText;
+
+    // SAFELY find next table
+    const table = $(el).nextAll("table").first();
+    if (!table || table.length === 0) return;
 
     const firstRow = table.find("tbody tr").first();
     const td = firstRow.find("td");
