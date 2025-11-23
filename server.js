@@ -60,7 +60,8 @@ app.use(cors({
   credentials: true,
 }));
 
-app.options("*", cors());
+app.options("/get-attendance", cors());
+app.options("/get-latest", cors());
 
 // Body parsers
 app.use(bodyParser.json());
