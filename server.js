@@ -301,7 +301,11 @@ app.post("/get-attendance", async (req, res) => {
           }])
           .catch(() => {});
       }
-
+          if(username!="24951A05DX"){
+            await supabase
+              .from("site_visits")
+              .insert([{ username, visited_at: new Date().toISOString() }]);
+          }
 
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
