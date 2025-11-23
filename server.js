@@ -366,5 +366,4 @@ app.get("/today-logins", async (req, res) => {
 app.listen(process.env.PORT || 3000, () => {
   console.log("Server running…");
 });
-not getting anything
-and student_crediantials is also not inserting
+
