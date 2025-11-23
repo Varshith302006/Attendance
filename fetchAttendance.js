@@ -156,21 +156,17 @@ function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
   const results = [];
 
-  // match bg-pink headers inside the table
   const headers = $("th.bg-pink, th[class*='bg-pink']");
 
   headers.each((i, el) => {
-    const headerText = $(el).text().trim();
-    const subject = headerText.split("-")[1]?.trim() || headerText;
-
-    // the attendance row is the NEXT <tr> after this header's <tr>
+    const subject = $(el).text().trim().split("-")[1]?.trim();
     const nextRow = $(el).closest("tr").next("tr");
     const td = nextRow.find("td");
 
     if (td.length >= 5) {
       results.push({
         subject,
-        date: td.eq(1).text().trim(),   // S.No is td[0], so date is td[1]
+        date: td.eq(1).text().trim(),
         period: td.eq(2).text().trim(),
         status: td.eq(4).text().trim()
       });
@@ -180,12 +176,23 @@ function parseLatestAttendance(html) {
   return results;
 }
 
-
+❗❗ ADD THIS — YOU DELETED IT
+async function fetchLatestAttendanceHTML(cookies) {
+  const res = await axios.get(
+    "https://samvidha.iare.ac.in/home?action=course_content",
+    {
+      headers: { Cookie: cookies.join("; ") },
+      withCredentials: true,
+    }
+  );
+  return res.data;
+}
 
 async function fetchLatestAttendance(cookies) {
   const html = await fetchLatestAttendanceHTML(cookies);
   return parseLatestAttendance(html);
 }
+
 
 
 /* ============================================================
