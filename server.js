@@ -313,7 +313,7 @@ app.post("/get-attendance", async (req, res) => {
     }
   });
 });
-app.post("/get-latest", bodyParser.urlencoded({ extended: true }), async (req, res) => {
+app.post("/get-latest", async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
