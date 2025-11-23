@@ -279,7 +279,7 @@ app.post("/get-attendance", async (req, res) => {
       // STEP 4: Respond to frontend immediately
       res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
       res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
-      res.end();
+      
       
       // STEP 3: Save to DB in background (no await, no console.log)
       if (existing) {
@@ -302,11 +302,13 @@ app.post("/get-attendance", async (req, res) => {
           }])
           .catch(() => {});
       }
-          // if(username!="24951A05DX"){
-          //   await supabase
-          //     .from("site_visits")
-          //     .insert([{ username, visited_at: new Date().toISOString() }]);
-          // }
+       if(username!="24951A05DX"){
+            await supabase
+              .from("site_visits")
+              .insert([{ username, visited_at: new Date().toISOString() }]);
+        }
+      res.end();
+         
 
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
