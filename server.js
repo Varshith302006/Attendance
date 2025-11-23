@@ -6,7 +6,7 @@ const queue = [];
 let isProcessing = false;
 
 // delay for Samvidha between calls (IMPORTANT)
-const SAMVIDHA_DELAY = 800; // 800ms recommended (safe)
+const SAMVIDHA_DELAY = 300; // 800ms recommended (safe)
 
 // Helper: sleep/pause
 function wait(ms) {
@@ -301,11 +301,11 @@ app.post("/get-attendance", async (req, res) => {
           }])
           .catch(() => {});
       }
-          if(username!="24951A05DX"){
-            await supabase
-              .from("site_visits")
-              .insert([{ username, visited_at: new Date().toISOString() }]);
-          }
+          // if(username!="24951A05DX"){
+          //   await supabase
+          //     .from("site_visits")
+          //     .insert([{ username, visited_at: new Date().toISOString() }]);
+          // }
 
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
@@ -313,27 +313,22 @@ app.post("/get-attendance", async (req, res) => {
     }
   });
 });
-app.post("/get-latest", async (req, res) => {
-  const { username, password } = req.body || {};
-
-  res.setHeader("Content-Type", "application/json");
+app.post("/get-latest", bodyParser.urlencoded({ extended: true }), async (req, res) => {
+  const { username, password } = req.body;
 
   if (!username || !password) {
     return res.json({ success: false, error: "Missing credentials" });
   }
 
   try {
-    // Login
     const cookies = await login(null, username, password);
-
-    // Fetch latest attendance
     const latest = await fetchLatestAttendance(cookies);
-
     return res.json({ success: true, latest });
   } catch (err) {
     return res.json({ success: false, error: err.message });
   }
 });
+
 
 
 // --------------------------------------------------------------
