@@ -302,8 +302,7 @@ app.post("/get-attendance", async (req, res) => {
           }])
           .catch(() => {});
       }
-      res.end();
-       // if (username !== "24951A05DX") {
+        // if (username !== "24951A05DX") {
         // background site visit log (debug mode)
         supabase
           .from("site_visits")
@@ -311,7 +310,17 @@ app.post("/get-attendance", async (req, res) => {
           .then(r => console.log("VISIT INSERT RESULT:", r))
           .catch(e => console.error("VISIT INSERT ERROR:", e));
 
-      // }  
+      // } 
+      app.get("/test", async (req, res) => {
+  const { data, error } = await supabase
+    .from("site_visits")
+    .insert([{ username: "TEST", visited_at: new Date().toISOString() }]);
+
+  res.json({ data, error });
+});
+
+      res.end();
+      
 
     } catch (err) {
       res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
