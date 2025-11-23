@@ -6,7 +6,7 @@ const queue = [];
 let isProcessing = false;
 
 // delay for Samvidha between calls (IMPORTANT)
-const SAMVIDHA_DELAY = 800; // 800ms recommended (safe)
+const SAMVIDHA_DELAY = 300; // 800ms recommended (safe)
 
 // Helper: sleep/pause
 function wait(ms) {
