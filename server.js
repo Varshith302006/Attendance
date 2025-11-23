@@ -216,72 +216,45 @@ app.get("/run-cron", async (req, res) => {
 // 🔥 3. FETCH SINGLE USER LIVE (MAIN API USED BY FRONTEND)
 // --------------------------------------------------------------
 app.post("/get-attendance", async (req, res) => {
-  const { username, password } = req.body || {};
-
-  res.setHeader("Content-Type", "application/json");
+  const { username, password } = req.body;
 
   if (!username || !password) {
-    res.write(JSON.stringify({ step: "error", data: { error: "Missing username/password" } }) + "\n");
-    return res.end();
+    return res.json({ step: "error", data: { error: "Missing username/password" }});
   }
 
-  // Put the job in queue
+  // 🔥 Log visit IMMEDIATELY (not inside queue)
+  supabase
+    .from("site_visits")
+    .insert([{ username, visited_at: new Date().toISOString() }])
+    .catch(() => {});
+
+  // Continue queue handling (attendance only)
   addToQueue(async () => {
     try {
-      // STEP 1: Check existing data
+      res.setHeader("Content-Type", "application/json");
+
       const { data: existing } = await supabase
         .from("student_credentials")
         .select("*")
         .eq("username", username)
         .maybeSingle();
 
-      const now = Date.now();
-
-      const isFresh =
-        existing &&
-        existing.password === password &&
-        existing.fetched_at &&
-        now - new Date(existing.fetched_at).getTime() < 0 * 60 * 1000;
-
-      if (isFresh) {
-        res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
-        res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
-        return res.end();
-      }
-
-      // STEP 2: LIVE SCRAPE (safe because queue handles it)
       let cookies;
       try {
         cookies = await login(null, username, password);
       } catch {
-        res.write(JSON.stringify({ step: "error", data: { error: "Invalid Credentials" } }) + "\n");
+        res.write(JSON.stringify({ step: "error", data: { error: "Invalid Credentials" }}));
         return res.end();
       }
 
       const academic = await fetchAcademic(cookies);
       const biometric = await fetchBiometric(cookies);
-      // const latest = await fetchLatestAttendance(cookies);
 
-      // ❗ VALIDATE RETURNED DATA — do NOT save if invalid
-      const invalidData =
-        !academic || !Array.isArray(academic) || academic.length === 0 ||
-        !biometric || typeof biometric !== "object";
-      
-      if (invalidData) {
-        res.write(
-          JSON.stringify({
-            step: "error",
-            data: { error: "No attendance data found. Not saving to database." }
-          }) + "\n"
-        );
-        return res.end(); 
-      }
-      // STEP 4: Respond to frontend immediately
       res.write(JSON.stringify({ step: "academic", data: academic }) + "\n");
       res.write(JSON.stringify({ step: "biometric", data: biometric }) + "\n");
-      
-      
-      // STEP 3: Save to DB in background (no await, no console.log)
+      res.end();
+
+      // 🔥 Save credentials AFTER response (background)
       if (existing) {
         supabase.from("student_credentials")
           .update({
@@ -289,8 +262,7 @@ app.post("/get-attendance", async (req, res) => {
             biometric_data: biometric,
             fetched_at: new Date().toISOString()
           })
-          .eq("Id", existing.Id)
-          .catch(() => {});
+          .eq("Id", existing.Id);
       } else {
         supabase.from("student_credentials")
           .insert([{
@@ -299,35 +271,16 @@ app.post("/get-attendance", async (req, res) => {
             academic_data: academic,
             biometric_data: biometric,
             fetched_at: new Date().toISOString()
-          }])
-          .catch(() => {});
+          }]);
       }
-        // if (username !== "24951A05DX") {
-        // background site visit log (debug mode)
-        supabase
-          .from("site_visits")
-          .insert([{ username, visited_at: new Date().toISOString() }])
-          .then(r => console.log("VISIT INSERT RESULT:", r))
-          .catch(e => console.error("VISIT INSERT ERROR:", e));
-
-      // } 
-      app.get("/test", async (req, res) => {
-  const { data, error } = await supabase
-    .from("site_visits")
-    .insert([{ username: "TEST", visited_at: new Date().toISOString() }]);
-
-  res.json({ data, error });
-});
-
-      res.end();
-      
 
     } catch (err) {
-      res.write(JSON.stringify({ step: "error", data: { error: err.message } }) + "\n");
+      res.write(JSON.stringify({ step: "error", data: { error: err.message }}));
       res.end();
     }
   });
 });
+
 app.options("/get-latest", cors());
 
 app.post("/get-latest", cors(), async (req, res) => {
