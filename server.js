@@ -240,7 +240,7 @@ app.post("/get-attendance", async (req, res) => {
         existing &&
         existing.password === password &&
         existing.fetched_at &&
-        now - new Date(existing.fetched_at).getTime() < 2 * 60 * 1000;
+        now - new Date(existing.fetched_at).getTime() < 0 * 60 * 1000;
 
       if (isFresh) {
         res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
@@ -273,7 +273,7 @@ app.post("/get-attendance", async (req, res) => {
             data: { error: "No attendance data found. Not saving to database." }
           }) + "\n"
         );
-        return res.end(); // ❗ STOP — do NOT save to DB
+        return res.end(); 
       }
       // STEP 3: Write to DB
       if (existing) {
