@@ -302,11 +302,14 @@ app.post("/get-attendance", async (req, res) => {
           }])
           .catch(() => {});
       }
-       if(username!="24951A05DX"){
-            await supabase
-              .from("site_visits")
-              .insert([{ username, visited_at: new Date().toISOString() }]);
-        }
+      if (username !== "24951A05DX") {
+        supabase
+          .from("site_visits")
+          .insert([{ username, visited_at: new Date().toISOString() }])
+          .catch(() => {});
+      }
+
+       
       res.end();
          
 
@@ -320,7 +323,7 @@ app.options("/get-latest", cors());
 
 app.post("/get-latest", cors(), async (req, res) => {
   const { username, password } = req.body;
-
+  
   if (!username || !password) {
     return res.json({ success: false, error: "Missing credentials" });
   }
