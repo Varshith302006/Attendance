@@ -161,11 +161,12 @@ function parseLatestAttendance(html) {
     4: null, 5: null, 6: null
   };
 
-  const today = new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  }).replace(",", "");
+   const today = new Date().toLocaleDateString("en-GB", {
+     timeZone: "Asia/Kolkata",
+     day: "2-digit",
+     month: "short",
+     year: "numeric"
+   }).replace(/ /, " ").replace(",", ","); // returns "23 Aug, 2025"
 
   let currentSubject = "";
   let rowCounter = 0;
