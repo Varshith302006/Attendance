@@ -195,49 +195,39 @@ function parseLatestAttendance(html) {
   let currentSubject = "";
   let rowCounter = 0;
 
-  $("tr").each((i, row) => {
-    const th = $(row).find("th.bg-pink, th[class*='bg-pink']");
-    if (th.length) {
-      const txt = th.text().trim();
-      currentSubject = txt.split("-")[1]?.trim() || txt;
-      rowCounter = 0;
-      return;
-    }
+ $("tr").each((i, row) => {
+  // SUBJECT HEADER
+  const th = $(row).find("th.bg-pink, th[class*='bg-pink']");
+  if (th.length) {
+    const txt = th.text().trim();
+    currentSubject = txt.split("-")[1]?.trim() || txt;
+    return;
+  }
 
-    const td = $(row).find("td");
-    if (td.length < 5) return;
+  // DATA ROW
+  const td = $(row).find("td");
+  if (td.length < 5) return;
 
-    rowCounter++;
-    if (rowCounter > 3) return;
+  const rawDate = td.eq(1).text().trim();
+  const period = Number(td.eq(2).text().trim());
+  const topic = td.eq(3).text().trim();
+  const status = td.eq(4).text().trim();
 
-    const rawDate = td.eq(1).text().trim();
-    const period = Number(td.eq(2).text().trim());
-    const topic = td.eq(3).text().trim();
-    const status = td.eq(4).text().trim();
+  if (period < 1 || period > 6) return;
 
-    // FIXED: log only after variables exist
-    console.log("ROW:", {
-      date: rawDate,
-      today,
+  // MATCH ONLY TODAY'S DATE
+  if (normalize(rawDate) === normalize(today)) {
+    periods[period] = {
       period,
+      subject: currentSubject,
       topic,
+      date: rawDate,
       status,
-      subject: currentSubject
-    });
+      dateNorm: normalize(rawDate),
+    };
+  }
+});
 
-    if (period < 1 || period > 6) return;
-
-    if (normalize(rawDate) === normalize(today)) {
-      periods[period] = {
-        period,
-        subject: currentSubject,
-        topic,
-        date: rawDate,
-        status,
-        dateNorm: normalize(rawDate) // <-- IMPORTANT
-      };
-    }
-  });
 
   const output = [];
   for (let p = 1; p <= 6; p++) {
