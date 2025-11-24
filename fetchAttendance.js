@@ -170,26 +170,25 @@ function getTodayStringIST() {
     year: "numeric",
   });
 
-  // EXACTLY like "23 Aug, 2025"
-  return `${day} ${month}, ${year}`;
+  return `${day} ${month}, ${year}`;  // EX: 24 Nov, 2025
 }
 
 function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
 
-  // 6 periods fixed
   const periods = {
     1: null, 2: null, 3: null,
     4: null, 5: null, 6: null
   };
 
-  const today = getTodayStringIST(); // "23 Aug, 2025"
+  const today = getTodayStringIST();
 
-  // Helper: clean weird spaces, commas, etc.
+  // IMPORTANT: Clean all weird spaces and commas
   const normalize = (s) =>
     s
-      .replace(/\u00A0/g, " ")   // non-breaking space -> normal
-      .replace(/\s+/g, " ")      // collapse spaces
+      .replace(/[\u00A0\u2007\u202F]/g, " ")  // all NBSP types
+      .replace(/,/g, "")                     // remove comma
+      .replace(/\s+/g, " ")                  // collapse spaces
       .trim()
       .toLowerCase();
 
@@ -197,47 +196,49 @@ function parseLatestAttendance(html) {
   let rowCounter = 0;
 
   $("tr").each((i, row) => {
-    // SUBJECT HEADER
     const th = $(row).find("th.bg-pink, th[class*='bg-pink']");
     if (th.length) {
       const txt = th.text().trim();
       currentSubject = txt.split("-")[1]?.trim() || txt;
-      rowCounter = 0; // reset for next subject
+      rowCounter = 0;
       return;
     }
 
-    // DATA ROW
     const td = $(row).find("td");
     if (td.length < 5) return;
 
     rowCounter++;
-    if (rowCounter > 3) return;  // ONLY first 3 rows per subject (your original rule)
+    if (rowCounter > 3) return;
 
-    const rawDate = td.eq(1).text();
-    const date = rawDate.trim();
-    console.log("ROW:", { date, today, period, topic, status, subject: currentSubject });
+    const rawDate = td.eq(1).text().trim();
     const period = Number(td.eq(2).text().trim());
     const topic = td.eq(3).text().trim();
     const status = td.eq(4).text().trim();
 
+    // FIXED: log only after variables exist
+    console.log("ROW:", {
+      date: rawDate,
+      today,
+      period,
+      topic,
+      status,
+      subject: currentSubject
+    });
+
     if (period < 1 || period > 6) return;
 
-    // ONLY if today's date (in IST)
-    if (normalize(date) === normalize(today)) {
-      // if same period appears multiple times today, last one wins
+    if (normalize(rawDate) === normalize(today)) {
       periods[period] = {
         period,
         subject: currentSubject,
         topic,
-        date,
+        date: rawDate,
         status,
+        dateNorm: normalize(rawDate) // <-- IMPORTANT
       };
     }
   });
-  
 
-
-  // Fill missing periods with NOT UPDATED
   const output = [];
   for (let p = 1; p <= 6; p++) {
     if (!periods[p]) {
@@ -246,7 +247,8 @@ function parseLatestAttendance(html) {
         subject: "NOT UPDATED",
         topic: "-",
         date: "-",
-        status: "NOT UPDATED"
+        status: "NOT UPDATED",
+        dateNorm: normalize("-")
       });
     } else {
       output.push(periods[p]);
