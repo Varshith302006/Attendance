@@ -152,6 +152,28 @@ function parseBiometric(html) {
 /* ============================================================
    PARSE LATEST ATTENDANCE (subject only from its own <th>)
    ============================================================ */
+function getTodayStringIST() {
+  const now = new Date();
+
+  const day = now.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+  });
+
+  const month = now.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    month: "short",
+  });
+
+  const year = now.toLocaleString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+  });
+
+  // EXACTLY like "23 Aug, 2025"
+  return `${day} ${month}, ${year}`;
+}
+
 function parseLatestAttendance(html) {
   const $ = cheerio.load(html);
 
@@ -161,18 +183,20 @@ function parseLatestAttendance(html) {
     4: null, 5: null, 6: null
   };
 
-   const today = new Date().toLocaleDateString("en-GB", {
-     timeZone: "Asia/Kolkata",
-     day: "2-digit",
-     month: "short",
-     year: "numeric"
-   }).replace(/ /, " ").replace(",", ","); // returns "23 Aug, 2025"
+  const today = getTodayStringIST(); // "23 Aug, 2025"
+
+  // Helper: clean weird spaces, commas, etc.
+  const normalize = (s) =>
+    s
+      .replace(/\u00A0/g, " ")   // non-breaking space -> normal
+      .replace(/\s+/g, " ")      // collapse spaces
+      .trim()
+      .toLowerCase();
 
   let currentSubject = "";
   let rowCounter = 0;
 
   $("tr").each((i, row) => {
-
     // SUBJECT HEADER
     const th = $(row).find("th.bg-pink, th[class*='bg-pink']");
     if (th.length) {
@@ -187,26 +211,31 @@ function parseLatestAttendance(html) {
     if (td.length < 5) return;
 
     rowCounter++;
-    if (rowCounter > 3) return;  // ONLY first 3 rows
+    if (rowCounter > 3) return;  // ONLY first 3 rows per subject (your original rule)
 
-    const date = td.eq(1).text().trim();
+    const rawDate = td.eq(1).text();
+    const date = rawDate.trim();
+    console.log("ROW:", { date, today, period, topic, status, subject: currentSubject });
     const period = Number(td.eq(2).text().trim());
     const topic = td.eq(3).text().trim();
     const status = td.eq(4).text().trim();
 
     if (period < 1 || period > 6) return;
 
-    // INSERT only if today
-    if (date === today) {
+    // ONLY if today's date (in IST)
+    if (normalize(date) === normalize(today)) {
+      // if same period appears multiple times today, last one wins
       periods[period] = {
         period,
         subject: currentSubject,
         topic,
         date,
-        status
+        status,
       };
     }
   });
+  
+
 
   // Fill missing periods with NOT UPDATED
   const output = [];
