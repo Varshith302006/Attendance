@@ -379,91 +379,81 @@ app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
       return res.status(400).json({ error: "Invalid target size" });
 
     const targetBytes = targetMB * 1024 * 1024;
-
     const inputPath = req.file.path;
     const filename = req.file.originalname.replace(/\.pdf$/i, "");
-
-    // Ghostscript loop settings
-    let dpi = 200;         // start strong
-    const minDPI = 60;     // lowest allowed DPI
-    const step = 20;
-
-    let finalPath = null;
     const outDir = "compressed";
+
     if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
 
-    while (dpi >= minDPI) {
-      const outPath = path.join(outDir, `${filename}_d${dpi}.pdf`);
+    // ---------------------------------------
+    // 🔥 FAST PASS 1 — Medium compression
+    // ---------------------------------------
+    const pass1 = path.join(outDir, filename + "_pass1.pdf");
 
-      // ⭐ BEST COMPRESSION (iLovePDF equivalent)
-      const args = [
-        "-sDEVICE=pdfwrite",
-        "-dCompatibilityLevel=1.4",
-        "-dNOPAUSE",
-        "-dQUIET",
-        "-dBATCH",
+    spawnSync("gs", [
+      "-sDEVICE=pdfwrite",
+      "-dCompatibilityLevel=1.4",
+      "-dNOPAUSE",
+      "-dQUIET",
+      "-dBATCH",
+      "-dPDFSETTINGS=/ebook",    // medium compression
+      "-sOutputFile=" + pass1,
+      inputPath
+    ]);
 
-        // ⭐ strongest JPEG compression preset
-        "-dPDFSETTINGS=/screen",
+    let size1 = fs.statSync(pass1).size;
+    console.log("Pass 1 size:", (size1 / 1024 / 1024).toFixed(2), "MB");
 
-        // ⭐ bicubic downsampling (cleaner output)
-        "-dColorImageDownsampleType=/Bicubic",
-        `-dColorImageResolution=${dpi}`,
-        "-dGrayImageDownsampleType=/Bicubic",
-        `-dGrayImageResolution=${dpi}`,
-        "-dMonoImageDownsampleType=/Subsample",
-        `-dMonoImageResolution=${dpi}`,
-
-        "-sOutputFile=" + outPath,
-        inputPath
-      ];
-
-      console.log("Running Ghostscript at DPI:", dpi);
-      const result = spawnSync("gs", args);
-
-      if (result.stderr && result.stderr.length > 0) {
-        console.log("GS ERROR:", result.stderr.toString());
-      }
-
-      if (!fs.existsSync(outPath)) {
-        console.log("❌ Ghostscript failed to generate output.");
-        return res.status(500).json({ error: "Ghostscript failed" });
-      }
-
-      const size = fs.statSync(outPath).size;
-      console.log(`📉 DPI ${dpi} → ${(size / (1024 * 1024)).toFixed(2)} MB`);
-
-      finalPath = outPath;
-
-      // stop if target reached
-      if (size <= targetBytes) break;
-
-      dpi -= step;
+    if (size1 <= targetBytes) {
+      return sendCompressed(pass1);
     }
 
-    if (!finalPath) {
-      return res.status(500).json({ error: "Compression failed" });
+    // ---------------------------------------
+    // 🔥 FAST PASS 2 — Strong compression
+    // ---------------------------------------
+    const pass2 = path.join(outDir, filename + "_pass2.pdf");
+
+    spawnSync("gs", [
+      "-sDEVICE=pdfwrite",
+      "-dCompatibilityLevel=1.4",
+      "-dNOPAUSE",
+      "-dQUIET",
+      "-dBATCH",
+      "-dPDFSETTINGS=/screen",  // stronger compression
+      "-sOutputFile=" + pass2,
+      pass1
+    ]);
+
+    let size2 = fs.statSync(pass2).size;
+    console.log("Pass 2 size:", (size2 / 1024 / 1024).toFixed(2), "MB");
+
+    if (size2 <= targetBytes) {
+      return sendCompressed(pass2);
     }
 
-    // download file
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${filename}_compressed.pdf"`
-    );
-    res.setHeader("Content-Type", "application/pdf");
+    // ---------------------------------------
+    // FINAL: If still not enough, return smallest version
+    // ---------------------------------------
+    return sendCompressed(size2 < size1 ? pass2 : pass1);
 
-    const stream = fs.createReadStream(finalPath);
-    stream.pipe(res);
-
-    stream.on("close", () => {
-      try { fs.unlinkSync(inputPath); } catch {}
-    });
+    // ---------------------------------------
+    // Helper: send file
+    // ---------------------------------------
+    function sendCompressed(filePath) {
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}_compressed.pdf"`
+      );
+      res.setHeader("Content-Type", "application/pdf");
+      fs.createReadStream(filePath).pipe(res);
+    }
 
   } catch (err) {
     console.error("PDF compression error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 // --------------------------------------------------------------
 // START SERVER
