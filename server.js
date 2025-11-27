@@ -356,6 +356,99 @@ app.get("/today-logins", async (req, res) => {
     res.json({ today_logins: 0 });
   }
 });
+// --------------------------------------------------------------
+// 📄 5. PDF COMPRESSION ENDPOINT (iLovePDF-Style, Ghostscript)
+// --------------------------------------------------------------
+
+const multer = require("multer");
+const { spawnSync } = require("child_process");
+const os = require("os");
+const path = require("path");
+
+const upload = multer({ dest: "uploads/" }); // temp folder
+
+app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No PDF uploaded" });
+
+    const targetMB = parseFloat(req.body.targetMB);
+    if (!targetMB || targetMB <= 0)
+      return res.status(400).json({ error: "Invalid target size" });
+
+    const targetBytes = targetMB * 1024 * 1024;
+
+    const inputPath = req.file.path;
+    const filename = req.file.originalname.replace(/\.pdf$/i, "");
+
+    // Ghostscript loop settings
+    let dpi = 200;      // Start high quality
+    const minDPI = 70;  // Don't go lower (still readable)
+    const step = 20;
+
+    let finalPath = null;
+    const outDir = "compressed";
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir);
+
+    while (dpi >= minDPI) {
+      const outPath = path.join(outDir, `${filename}_d${dpi}.pdf`);
+
+      // Ghostscript arguments (high quality text preservation)
+      const args = [
+        "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.4",
+        "-dNOPAUSE",
+        "-dQUIET",
+        "-dBATCH",
+        "-dColorImageDownsampleType=/Bicubic",
+        `-dColorImageResolution=${dpi}`,
+        "-dGrayImageDownsampleType=/Bicubic",
+        `-dGrayImageResolution=${dpi}`,
+        "-dMonoImageDownsampleType=/Subsample",
+        `-dMonoImageResolution=${Math.min(300, dpi)}`,
+        "-sOutputFile=" + outPath,
+        inputPath
+      ];
+
+      const result = spawnSync("gs", args);
+
+      if (!fs.existsSync(outPath)) {
+        return res.status(500).json({ error: "Ghostscript failed" });
+      }
+
+      const size = fs.statSync(outPath).size;
+      console.log(`DPI ${dpi} -> ${(size / (1024 * 1024)).toFixed(2)} MB`);
+
+      finalPath = outPath;
+
+      if (size <= targetBytes) break;
+      dpi -= step;
+    }
+
+    if (!finalPath) {
+      return res.status(500).json({ error: "Compression failed" });
+    }
+
+    // Send final compressed PDF
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}_compressed.pdf"`
+    );
+    res.setHeader("Content-Type", "application/pdf");
+
+    const stream = fs.createReadStream(finalPath);
+    stream.pipe(res);
+
+    stream.on("close", () => {
+      try { fs.unlinkSync(inputPath); } catch {}
+      // delete generated if you want:
+      // fs.unlinkSync(finalPath);
+    });
+
+  } catch (err) {
+    console.error("PDF compression error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // --------------------------------------------------------------
 // START SERVER
