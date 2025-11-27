@@ -7,9 +7,9 @@
     "chromium": "^3.0.2",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "multer": "^2.0.2",
     "puppeteer-cluster": "^0.23.0",
-    "puppeteer-core": "^22.6.2",
-    "multer": "^1.4.5"
+    "puppeteer-core": "^22.6.2"
   },
   "scripts": {
     "start": "node server.js"
