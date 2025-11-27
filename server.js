@@ -408,10 +408,17 @@ app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
         "-sOutputFile=" + outPath,
         inputPath
       ];
-
+  console.log("Running Ghostscript with DPI:", dpi);
+  console.log("Input PDF:", inputPath);
+  console.log("Output PDF:", outPath);
+  console.log("GS ARGS:", args);
       const result = spawnSync("gs", args);
-
+  // ⭐ Check for Ghostscript errors
+  if (result.stderr) {
+    console.log("GS ERROR:", result.stderr.toString());
+  }
       if (!fs.existsSync(outPath)) {
+            console.log("GS FAILED — output PDF not created!");
         return res.status(500).json({ error: "Ghostscript failed" });
       }
 
