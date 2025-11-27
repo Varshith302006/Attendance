@@ -366,7 +366,6 @@ app.get("/today-logins", async (req, res) => {
 
 const multer = require("multer");
 const { spawnSync } = require("child_process");
-const fs = require("fs");
 const path = require("path");
 
 const upload = multer({ dest: "uploads/" });
