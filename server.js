@@ -360,12 +360,16 @@ app.get("/today-logins", async (req, res) => {
 // 📄 5. PDF COMPRESSION ENDPOINT (iLovePDF-Style, Ghostscript)
 // --------------------------------------------------------------
 
+// --------------------------------------------------------------
+// 📄 5. PDF COMPRESSION ENDPOINT (iLovePDF-Style, Ghostscript)
+// --------------------------------------------------------------
+
 const multer = require("multer");
 const { spawnSync } = require("child_process");
-const os = require("os");
+const fs = require("fs");
 const path = require("path");
 
-const upload = multer({ dest: "uploads/" }); // temp folder
+const upload = multer({ dest: "uploads/" });
 
 app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
   try {
@@ -381,8 +385,8 @@ app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
     const filename = req.file.originalname.replace(/\.pdf$/i, "");
 
     // Ghostscript loop settings
-    let dpi = 200;      // Start high quality
-    const minDPI = 70;  // Don't go lower (still readable)
+    let dpi = 200;         // start strong
+    const minDPI = 60;     // lowest allowed DPI
     const step = 20;
 
     let finalPath = null;
@@ -392,42 +396,49 @@ app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
     while (dpi >= minDPI) {
       const outPath = path.join(outDir, `${filename}_d${dpi}.pdf`);
 
-      // Ghostscript arguments (high quality text preservation)
+      // ⭐ BEST COMPRESSION (iLovePDF equivalent)
       const args = [
         "-sDEVICE=pdfwrite",
         "-dCompatibilityLevel=1.4",
         "-dNOPAUSE",
         "-dQUIET",
         "-dBATCH",
+
+        // ⭐ strongest JPEG compression preset
+        "-dPDFSETTINGS=/screen",
+
+        // ⭐ bicubic downsampling (cleaner output)
         "-dColorImageDownsampleType=/Bicubic",
         `-dColorImageResolution=${dpi}`,
         "-dGrayImageDownsampleType=/Bicubic",
         `-dGrayImageResolution=${dpi}`,
         "-dMonoImageDownsampleType=/Subsample",
-        `-dMonoImageResolution=${Math.min(300, dpi)}`,
+        `-dMonoImageResolution=${dpi}`,
+
         "-sOutputFile=" + outPath,
         inputPath
       ];
-  console.log("Running Ghostscript with DPI:", dpi);
-  console.log("Input PDF:", inputPath);
-  console.log("Output PDF:", outPath);
-  console.log("GS ARGS:", args);
+
+      console.log("Running Ghostscript at DPI:", dpi);
       const result = spawnSync("gs", args);
-  // ⭐ Check for Ghostscript errors
-  if (result.stderr) {
-    console.log("GS ERROR:", result.stderr.toString());
-  }
+
+      if (result.stderr && result.stderr.length > 0) {
+        console.log("GS ERROR:", result.stderr.toString());
+      }
+
       if (!fs.existsSync(outPath)) {
-            console.log("GS FAILED — output PDF not created!");
+        console.log("❌ Ghostscript failed to generate output.");
         return res.status(500).json({ error: "Ghostscript failed" });
       }
 
       const size = fs.statSync(outPath).size;
-      console.log(`DPI ${dpi} -> ${(size / (1024 * 1024)).toFixed(2)} MB`);
+      console.log(`📉 DPI ${dpi} → ${(size / (1024 * 1024)).toFixed(2)} MB`);
 
       finalPath = outPath;
 
+      // stop if target reached
       if (size <= targetBytes) break;
+
       dpi -= step;
     }
 
@@ -435,7 +446,7 @@ app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
       return res.status(500).json({ error: "Compression failed" });
     }
 
-    // Send final compressed PDF
+    // download file
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="${filename}_compressed.pdf"`
@@ -447,8 +458,6 @@ app.post("/compress-pdf", upload.single("pdf"), async (req, res) => {
 
     stream.on("close", () => {
       try { fs.unlinkSync(inputPath); } catch {}
-      // delete generated if you want:
-      // fs.unlinkSync(finalPath);
     });
 
   } catch (err) {
