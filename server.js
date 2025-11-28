@@ -53,7 +53,8 @@ const app = express();
 app.use(cors({
   origin: [
     "https://attendancedashboar.vercel.app",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    "http://localhost:59138"
   ],
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
