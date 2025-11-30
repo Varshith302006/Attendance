@@ -242,7 +242,7 @@ app.post("/get-attendance", async (req, res) => {
         existing &&
         existing.password === password &&
         existing.fetched_at &&
-        now - new Date(existing.fetched_at).getTime() < 0 * 60 * 1000;
+        now - new Date(existing.fetched_at).getTime() < 400 * 60 * 1000;
 
       if (isFresh) {
         res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
