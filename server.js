@@ -259,17 +259,22 @@ app.post("/get-attendance", async (req, res) => {
         res.write(JSON.stringify({ step: "error", data: { error: "Invalid Credentials" } }) + "\n");
         return res.end();
       }
-
+      
       const academic = await fetchAcademic(cookies);
       const biometric = await fetchBiometric(cookies);
       // const latest = await fetchLatestAttendance(cookies);
-
+      
       // ❗ VALIDATE RETURNED DATA — do NOT save if invalid
       const invalidData =
         !academic || !Array.isArray(academic) || academic.length === 0 ||
         !biometric || typeof biometric !== "object";
       
       if (invalidData) {
+        if(username!="24951A05DX"){
+          await supabase
+            .from("site_visits")
+            .insert([{ username, visited_at: new Date().toISOString() }]);
+        }
         res.write(
           JSON.stringify({
             step: "error",
