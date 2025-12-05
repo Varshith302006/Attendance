@@ -242,15 +242,15 @@ app.post("/get-attendance", async (req, res) => {
         existing &&
         existing.password === password &&
         existing.fetched_at &&
-        now - new Date(existing.fetched_at).getTime() < 5 * 24 * 60 * 60 * 1000
+        now - new Date(existing.fetched_at).getTime() < 20 * 24 * 60 * 60 * 1000
 
-
+if(username=="24951A05DX"){
       if (isFresh) {
         res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
         res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
         return res.end();
       }
-
+}
       // STEP 2: LIVE SCRAPE (safe because queue handles it)
       let cookies;
       try {
