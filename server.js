@@ -86,132 +86,132 @@ function logEvent(event, details = {}) {
   fs.appendFileSync(LOG_FILE, line + '\n');
 }
 
-// --------------------------------------------------------------
-// 🔥 1. FETCH SELECTED USERS (CRON-LIKE)
-// --------------------------------------------------------------
-app.post("/run-selected", async (req, res) => {
-  const { usernames } = req.body;
+// // --------------------------------------------------------------
+// // 🔥 1. FETCH SELECTED USERS (CRON-LIKE)
+// // --------------------------------------------------------------
+// app.post("/run-selected", async (req, res) => {
+//   const { usernames } = req.body;
 
-  if (!Array.isArray(usernames) || usernames.length === 0) {
-    return res.status(400).json({ success: false, message: "Usernames must be a non-empty array" });
-  }
+//   if (!Array.isArray(usernames) || usernames.length === 0) {
+//     return res.status(400).json({ success: false, message: "Usernames must be a non-empty array" });
+//   }
 
-  const start = Date.now();
-  initLogFile();
+//   const start = Date.now();
+//   initLogFile();
 
-  try {
-    const { data: users, error } = await supabase
-      .from("student_credentials")
-      .select("Id, username, password")
-      .in("username", usernames);
+//   try {
+//     const { data: users, error } = await supabase
+//       .from("student_credentials")
+//       .select("Id, username, password")
+//       .in("username", usernames);
 
-    if (error) throw error;
+//     if (error) throw error;
 
-    if (!users || users.length === 0) {
-      return res.json({ success: true, message: "No matching users", processed: 0 });
-    }
+//     if (!users || users.length === 0) {
+//       return res.json({ success: true, message: "No matching users", processed: 0 });
+//     }
 
-    let processed = 0, succeeded = 0, skipped = 0;
+//     let processed = 0, succeeded = 0, skipped = 0;
 
-    for (const user of users) {
-      processed++;
+//     for (const user of users) {
+//       processed++;
 
-      if (!user.username || !user.password) {
-        skipped++;
-        continue;
-      }
+//       if (!user.username || !user.password) {
+//         skipped++;
+//         continue;
+//       }
 
-      try {
-        // LOGIN (returns cookies)
-        const cookies = await login(null, user.username, user.password);
+//       try {
+//         // LOGIN (returns cookies)
+//         const cookies = await login(null, user.username, user.password);
 
-        // FETCH ACADEMIC + BIOMETRIC
-        // const academic = await fetchAcademic(cookies);
-        // const biometric = await fetchBiometric(cookies);
-        const [academic, biometric] = await Promise.all([
-          fetchAcademic(cookies),
-          fetchBiometric(cookies)
-        ]);
+//         // FETCH ACADEMIC + BIOMETRIC
+//         // const academic = await fetchAcademic(cookies);
+//         // const biometric = await fetchBiometric(cookies);
+//         const [academic, biometric] = await Promise.all([
+//           fetchAcademic(cookies),
+//           fetchBiometric(cookies)
+//         ]);
 
 
-        // SAVE TO DB
-        await supabase
-          .from("student_credentials")
-          .update({
-            academic_data: academic,
-            biometric_data: biometric,
-            fetched_at: new Date().toISOString(),
-          })
-          .eq("Id", user.Id);
+//         // SAVE TO DB
+//         await supabase
+//           .from("student_credentials")
+//           .update({
+//             academic_data: academic,
+//             biometric_data: biometric,
+//             fetched_at: new Date().toISOString(),
+//           })
+//           .eq("Id", user.Id);
 
-        succeeded++;
+//         succeeded++;
 
-      } catch (err) {
-        skipped++;
-      }
-    }
+//       } catch (err) {
+//         skipped++;
+//       }
+//     }
 
-    const elapsed = Math.round((Date.now() - start) / 1000);
+//     const elapsed = Math.round((Date.now() - start) / 1000);
 
-    return res.json({ success: true, processed, succeeded, skipped, time_seconds: elapsed });
+//     return res.json({ success: true, processed, succeeded, skipped, time_seconds: elapsed });
 
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
+//   } catch (err) {
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// });
 
-// --------------------------------------------------------------
-// 🔥 2. AUTO CRON (FETCH ALL USERS)
-// --------------------------------------------------------------
-app.get("/run-cron", async (req, res) => {
-  const start = Date.now();
-  initLogFile();
+// // --------------------------------------------------------------
+// // 🔥 2. AUTO CRON (FETCH ALL USERS)
+// // --------------------------------------------------------------
+// app.get("/run-cron", async (req, res) => {
+//   const start = Date.now();
+//   initLogFile();
 
-  try {
-    const { data: users, error } = await supabase
-      .from("student_credentials")
-      .select("Id, username, password");
+//   try {
+//     const { data: users, error } = await supabase
+//       .from("student_credentials")
+//       .select("Id, username, password");
 
-    if (error) throw error;
+//     if (error) throw error;
 
-    let processed = 0, succeeded = 0, skipped = 0;
+//     let processed = 0, succeeded = 0, skipped = 0;
 
-    for (const user of users) {
-      processed++;
+//     for (const user of users) {
+//       processed++;
 
-      if (!user.username || !user.password) {
-        skipped++;
-        continue;
-      }
+//       if (!user.username || !user.password) {
+//         skipped++;
+//         continue;
+//       }
 
-      try {
-        const cookies = await login(null, user.username, user.password);
-        const academic = await fetchAcademic(cookies);
-        const biometric = await fetchBiometric(cookies);
+//       try {
+//         const cookies = await login(null, user.username, user.password);
+//         const academic = await fetchAcademic(cookies);
+//         const biometric = await fetchBiometric(cookies);
 
-        await supabase
-          .from("student_credentials")
-          .update({
-            academic_data: academic,
-            biometric_data: biometric,
-            fetched_at: new Date().toISOString(),
-          })
-          .eq("Id", user.Id);
+//         await supabase
+//           .from("student_credentials")
+//           .update({
+//             academic_data: academic,
+//             biometric_data: biometric,
+//             fetched_at: new Date().toISOString(),
+//           })
+//           .eq("Id", user.Id);
 
-        succeeded++;
-      } catch {
-        skipped++;
-      }
-    }
+//         succeeded++;
+//       } catch {
+//         skipped++;
+//       }
+//     }
 
-    const elapsed = Math.round((Date.now() - start) / 1000);
+//     const elapsed = Math.round((Date.now() - start) / 1000);
 
-    return res.json({ success: true, processed, succeeded, skipped, time_seconds: elapsed });
+//     return res.json({ success: true, processed, succeeded, skipped, time_seconds: elapsed });
 
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
+//   } catch (err) {
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// });
 
 // --------------------------------------------------------------
 // 🔥 3. FETCH SINGLE USER LIVE (MAIN API USED BY FRONTEND)
@@ -242,7 +242,7 @@ app.post("/get-attendance", async (req, res) => {
         existing &&
         existing.password === password &&
         existing.fetched_at &&
-        now - new Date(existing.fetched_at).getTime() < 20 * 24 * 60 * 60 * 1000
+        now - new Date(existing.fetched_at).getTime() < 200 * 24 * 60 * 60 * 1000
 
 if(username=="24951A05DX"){
       if (isFresh) {
