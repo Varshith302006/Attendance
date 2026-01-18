@@ -44,7 +44,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const { initBrowser, login, fetchAcademic, fetchBiometric, fetchLatestAttendance} = require("./fetchAttendance");
+const { initBrowser, login, fetchAcademic, fetchBiometric, fetchLatestAttendance,parseAttendanceRegister} = require("./fetchAttendance");
 const fs = require('fs');
 
 const app = express();
@@ -337,6 +337,26 @@ app.post("/get-latest", async (req, res) => {
   } catch (err) {
     return res.json({ success: false, error: err.message });
   }
+});
+
+app.post("/get-attendance-register", async (req, res) => {
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({ success: false });
+  }
+
+  addToQueue(async () => {
+    try {
+      const cookies = await login(null, username, password);
+      const html = await fetchLatestAttendanceHTML(cookies);
+      const register = parseAttendanceRegister(html);
+
+      res.json({ success: true, records: register });
+    } catch (err) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
 });
 
 
