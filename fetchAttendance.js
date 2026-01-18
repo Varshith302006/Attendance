@@ -126,7 +126,7 @@ function parseBiometric(html) {
 
   $("table tbody tr").each((i, row) => {
     const td = $(row).find("td");
-    if (td.length < 10) return;
+    if (td.length < 5) return;
 
     totalDays++;
 
