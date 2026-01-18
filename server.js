@@ -242,15 +242,15 @@ app.post("/get-attendance", async (req, res) => {
         existing &&
         existing.password === password &&
         existing.fetched_at &&
-        now - new Date(existing.fetched_at).getTime() < 200 * 24 * 60 * 60 * 1000
+        now - new Date(existing.fetched_at).getTime() < 0
 
-if(username=="24951A05DX"){
+
       if (isFresh) {
         res.write(JSON.stringify({ step: "academic", data: existing.academic_data }) + "\n");
         res.write(JSON.stringify({ step: "biometric", data: existing.biometric_data }) + "\n");
         return res.end();
       }
-}
+
       // STEP 2: LIVE SCRAPE (safe because queue handles it)
       let cookies;
       try {
@@ -270,11 +270,6 @@ if(username=="24951A05DX"){
         !biometric || typeof biometric !== "object";
       
       if (invalidData) {
-        if(username!="24951A05DX"){
-          await supabase
-            .from("site_visits")
-            .insert([{ username, visited_at: new Date().toISOString() }]);
-        }
         res.write(
           JSON.stringify({
             step: "error",
