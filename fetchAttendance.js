@@ -337,5 +337,6 @@ module.exports = {
   fetchAcademic,
   fetchBiometric,
   fetchLatestAttendance,
+   fetchLatestAttendanceHTML,
    parseAttendanceRegister
 };
