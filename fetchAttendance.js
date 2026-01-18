@@ -266,6 +266,48 @@ async function fetchLatestAttendance(cookies) {
   return parseLatestAttendance(html);
 }
 
+function parseAttendanceRegister(html) {
+  const $ = cheerio.load(html);
+
+  const records = [];
+  let currentSubject = "";
+
+  const normalize = (s) =>
+    s.replace(/[\u00A0\u2007\u202F]/g, " ")
+     .replace(/,/g, "")
+     .replace(/\s+/g, " ")
+     .trim();
+
+  $("tr").each((_, row) => {
+
+    // SUBJECT HEADER
+    const th = $(row).find("th.bg-pink, th[class*='bg-pink']");
+    if (th.length) {
+      const txt = th.text().trim();
+      currentSubject = txt.split("-")[1]?.trim() || txt;
+      return;
+    }
+
+    // DATA ROW
+    const td = $(row).find("td");
+    if (td.length < 5) return;
+
+    const date = normalize(td.eq(1).text());
+    const period = Number(td.eq(2).text());
+    const status = td.eq(4).text().trim().toUpperCase();
+
+    if (!date || period < 1 || period > 6) return;
+
+    records.push({
+      subject: currentSubject,
+      date,
+      period,
+      status: status.includes("PRESENT") ? "P" : "A"
+    });
+  });
+
+  return records;
+}
 
 
 /* ============================================================
@@ -294,5 +336,6 @@ module.exports = {
   login,
   fetchAcademic,
   fetchBiometric,
-  fetchLatestAttendance
+  fetchLatestAttendance,
+   parseAttendanceRegister
 };
